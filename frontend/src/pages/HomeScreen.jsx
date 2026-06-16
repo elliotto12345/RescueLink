@@ -1,3 +1,4 @@
+import React from "react";
 import {
   View,
   Text,
@@ -38,7 +39,6 @@ export default function HomeScreen({ navigation }) {
         >
           <Text style={styles.primaryButtonText}>Get Help Now 🚨</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.secondaryButton}
           onPress={() => navigation.navigate("Login")}
@@ -82,6 +82,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 16,
+    paddingTop: 20,
   },
   logo: {
     fontSize: 22,
@@ -97,6 +98,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 8,
   },
   emoji: {
     fontSize: 64,
@@ -117,7 +119,8 @@ const styles = StyleSheet.create({
   },
   buttonGroup: {
     gap: 12,
-    marginBottom: 32,
+    marginBottom: 24,
+    paddingHorizontal: 8,
   },
   primaryButton: {
     backgroundColor: "#2563EB",
@@ -150,6 +153,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
+    marginHorizontal: 8,
   },
   statItem: {
     alignItems: "center",

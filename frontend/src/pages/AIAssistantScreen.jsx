@@ -14,18 +14,7 @@ import {
 import { useState, useRef } from "react";
 import axios from "axios";
 
-const ANTHROPIC_API_KEY =
-  "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";
-
-const systemPrompt = `You are RescueLink AI Assistant, an expert vehicle breakdown assistant. 
-Your job is to help stranded drivers understand their vehicle issues and provide clear, 
-simple guidance while they wait for a mechanic. 
-- Keep responses short, clear and easy to understand
-- Always reassure the user
-- Suggest safety precautions when needed
-- Never recommend dangerous DIY fixes
-- Always remind them a verified mechanic is on the way`;
-
+const GROQ_API_KEY = "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";
 export default function AIAssistantScreen({ navigation }) {
   const [messages, setMessages] = useState([
     {
@@ -63,27 +52,35 @@ export default function AIAssistantScreen({ navigation }) {
 
     try {
       const response = await axios.post(
-        "https://api.anthropic.com/v1/messages",
+        "https://api.groq.com/openai/v1/chat/completions",
         {
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 1024,
-          system: systemPrompt,
-          messages: [{ role: "user", content: currentMessage }],
+          model: "llama-3.1-8b-instant",
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are RescueLink AI Assistant, an expert vehicle breakdown assistant. Your job is to help stranded drivers understand their vehicle issues and provide clear simple guidance while they wait for a mechanic. Keep responses short and clear. Always reassure the user. Suggest safety precautions when needed. Never recommend dangerous DIY fixes. Always remind them a verified mechanic is on the way.",
+            },
+            {
+              role: "user",
+              content: currentMessage,
+            },
+          ],
+          max_tokens: 500,
         },
         {
           headers: {
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "anthropic-dangerous-direct-network-requests": "true",
-            "content-type": "application/json",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${GROQ_API_KEY}`,
           },
+          timeout: 30000,
         },
       );
 
       const aiReply = {
         id: messages.length + 2,
         sender: "ai",
-        message: response.data.content[0].text,
+        message: response.data.choices[0].message.content,
         time: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -92,12 +89,14 @@ export default function AIAssistantScreen({ navigation }) {
 
       setMessages((prev) => [...prev, aiReply]);
     } catch (error) {
-      console.log("Error:", error.response?.data || error.message);
+      console.log("Full error:", JSON.stringify(error.response?.data));
+      console.log("Status:", error.response?.status);
+      console.log("Message:", error.message);
       const errorMsg = {
         id: messages.length + 2,
         sender: "ai",
         message:
-          "Sorry, I am having trouble connecting right now. Please try again in a moment. 🔄",
+          "Error: " + (error.response?.data?.error?.message || error.message),
         time: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -121,8 +120,10 @@ export default function AIAssistantScreen({ navigation }) {
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>🤖</Text>
           <View>
-            <Text style={styles.headerTitle}>AI Assistant. </Text>
-            <Text style={styles.headerSubtitle}>🟢 RescueLink Inc</Text>
+            <Text style={styles.headerTitle}>AI Assistant</Text>
+            <Text style={styles.headerSubtitle}>
+              🟢 Powered by RescueLink Ai
+            </Text>
           </View>
         </View>
         <View style={{ width: 50 }} />
@@ -187,7 +188,6 @@ export default function AIAssistantScreen({ navigation }) {
             </View>
           ))}
 
-          {/* Loading indicator */}
           {loading && (
             <View style={styles.messageRowAI}>
               <View style={styles.aiAvatar}>
