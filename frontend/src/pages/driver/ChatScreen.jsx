@@ -11,47 +11,134 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { getSocket, connectSocket, sendMessage } from "../utils/socket";
-import { getUser } from "../utils/storage";
+import { connectSocket, sendMessage } from "../../services/socket";
+import { getUser } from "../../services/storage";
+import { NEARBY_MECHANICS } from "../../data/sampleData";
 
-const initialMessages = [
-  {
-    id: 1,
-    sender: "mechanic",
-    message:
-      "Hello! I have accepted your request. I am on my way to your location.",
-    time: "10:46 AM",
-  },
-  {
-    id: 2,
-    sender: "user",
-    message: "Thank you! I am at the Total filling station on the main road.",
-    time: "10:47 AM",
-  },
-  {
-    id: 3,
-    sender: "mechanic",
-    message:
-      "Perfect, I can see your location. I will be there in about 8 minutes.",
-    time: "10:47 AM",
-  },
-];
+const CHAT_THREADS = {
+  m1: [
+    {
+      id: 1,
+      sender: "mechanic",
+      message:
+        "Hello! I have accepted your request. I am on my way to your location.",
+      time: "10:46 AM",
+    },
+    {
+      id: 2,
+      sender: "user",
+      message: "Thank you! I am at the Total filling station on the main road.",
+      time: "10:47 AM",
+    },
+    {
+      id: 3,
+      sender: "mechanic",
+      message:
+        "Perfect, I can see your location. I will be there in about 8 minutes.",
+      time: "10:47 AM",
+    },
+  ],
+  m2: [
+    {
+      id: 1,
+      sender: "mechanic",
+      message: "Hi! Thanks for reaching out. How can I help today?",
+      time: "9:15 AM",
+    },
+  ],
+  m3: [
+    {
+      id: 1,
+      sender: "mechanic",
+      message: "Can you share a photo of the dashboard warning?",
+      time: "Mon",
+    },
+  ],
+  m4: [
+    {
+      id: 1,
+      sender: "mechanic",
+      message: "Job completed. Drive safe!",
+      time: "May 28",
+    },
+  ],
+};
 
-export default function ChatScreen({ navigation }) {
-  const [messages, setMessages] = useState(initialMessages);
+function MechanicChatList({ navigation, onSelectMechanic }) {
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.listHeader}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        <View style={styles.listHeaderCenter}>
+          <Text style={styles.listTitle}>Messages 💬</Text>
+          <Text style={styles.listSubtitle}>
+            Choose a mechanic to start chatting
+          </Text>
+        </View>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {NEARBY_MECHANICS.map((mechanic) => (
+          <TouchableOpacity
+            key={mechanic.id}
+            style={styles.listItem}
+            onPress={() => onSelectMechanic(mechanic)}
+          >
+            <View style={styles.mechanicAvatar}>
+              <Text style={styles.mechanicAvatarText}>
+                {mechanic.name.charAt(0)}
+              </Text>
+            </View>
+            <View style={styles.listItemContent}>
+              <View style={styles.listItemTop}>
+                <Text style={styles.listItemName} numberOfLines={1}>
+                  {mechanic.name}
+                </Text>
+                <Text style={styles.listItemTime}>{mechanic.lastMessageTime}</Text>
+              </View>
+              <View style={styles.listItemBottom}>
+                <Text style={styles.listItemPreview} numberOfLines={1}>
+                  {mechanic.lastMessage}
+                </Text>
+                {mechanic.unread > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadText}>{mechanic.unread}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.listItemMeta} numberOfLines={1}>
+                ⭐ {mechanic.rating} · {mechanic.specialties?.[0]}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+        <View style={{ height: 24 }} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function MechanicChatThread({ mechanic, onBack }) {
+  const [messages, setMessages] = useState(
+    CHAT_THREADS[mechanic.id] || [],
+  );
   const [newMessage, setNewMessage] = useState("");
   const scrollViewRef = useRef();
 
   useEffect(() => {
     initSocket();
-  }, []);
+  }, [mechanic.id]);
 
   const initSocket = async () => {
     const user = await getUser();
     const socket = connectSocket(user?.id);
 
+    socket.off("receiveMessage");
     socket.on("receiveMessage", (data) => {
-      if (data.sender !== "user") {
+      if (data.sender !== "user" && data.mechanicId === mechanic.id) {
         setMessages((prev) => [...prev, data]);
       }
     });
@@ -65,6 +152,7 @@ export default function ChatScreen({ navigation }) {
       id: messages.length + 1,
       sender: "user",
       senderId: user?.id,
+      mechanicId: mechanic.id,
       message: newMessage.trim(),
       time: new Date().toLocaleTimeString([], {
         hour: "2-digit",
@@ -81,21 +169,26 @@ export default function ChatScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={onBack} style={styles.headerBack}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <View style={styles.mechanicAvatar}>
-            <Text style={styles.mechanicAvatarText}>K</Text>
+          <View style={styles.mechanicAvatarSmall}>
+            <Text style={styles.mechanicAvatarText}>
+              {mechanic.name.charAt(0)}
+            </Text>
           </View>
-          <View>
-            <Text style={styles.mechanicName}>Kwame Mensah</Text>
-            <Text style={styles.mechanicStatus}>🟢 On the way</Text>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.mechanicName} numberOfLines={1}>
+              {mechanic.name}
+            </Text>
+            <Text style={styles.mechanicStatus} numberOfLines={1}>
+              🟢 {mechanic.status === "busy" ? "Busy" : "Available"}
+            </Text>
           </View>
         </View>
-        <TouchableOpacity>
+        <TouchableOpacity style={styles.callBtn}>
           <Text style={styles.callText}>📞</Text>
         </TouchableOpacity>
       </View>
@@ -105,7 +198,6 @@ export default function ChatScreen({ navigation }) {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
-        {/* Messages */}
         <ScrollView
           ref={scrollViewRef}
           style={styles.messagesList}
@@ -115,7 +207,6 @@ export default function ChatScreen({ navigation }) {
           }
           showsVerticalScrollIndicator={false}
         >
-          {/* Date Badge */}
           <View style={styles.dateBadge}>
             <Text style={styles.dateBadgeText}>Today</Text>
           </View>
@@ -132,7 +223,9 @@ export default function ChatScreen({ navigation }) {
             >
               {msg.sender === "mechanic" && (
                 <View style={styles.smallAvatar}>
-                  <Text style={styles.smallAvatarText}>K</Text>
+                  <Text style={styles.smallAvatarText}>
+                    {mechanic.name.charAt(0)}
+                  </Text>
                 </View>
               )}
               <View
@@ -168,7 +261,6 @@ export default function ChatScreen({ navigation }) {
           ))}
         </ScrollView>
 
-        {/* Input */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
@@ -194,6 +286,39 @@ export default function ChatScreen({ navigation }) {
   );
 }
 
+export default function ChatScreen({ navigation, route }) {
+  const initialMechanic = route.params?.mechanic ?? null;
+  const [selectedMechanic, setSelectedMechanic] = useState(initialMechanic);
+
+  useEffect(() => {
+    if (route.params?.mechanic) {
+      setSelectedMechanic(route.params.mechanic);
+    }
+  }, [route.params?.mechanic]);
+
+  if (selectedMechanic) {
+    return (
+      <MechanicChatThread
+        mechanic={selectedMechanic}
+        onBack={() => {
+          if (initialMechanic) {
+            navigation.goBack();
+          } else {
+            setSelectedMechanic(null);
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <MechanicChatList
+      navigation={navigation}
+      onSelectMechanic={setSelectedMechanic}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -202,15 +327,100 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  header: {
+  listHeader: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  listHeaderCenter: {
+    marginTop: 8,
+  },
+  listTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#1F2937",
+  },
+  listSubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginTop: 4,
+    flexWrap: "wrap",
+  },
+  listItem: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 24,
     paddingVertical: 16,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
+    gap: 14,
+  },
+  listItemContent: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  listItemTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  listItemName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1F2937",
+  },
+  listItemTime: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    flexShrink: 0,
+  },
+  listItemBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+    gap: 8,
+  },
+  listItemPreview: {
+    flex: 1,
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  listItemMeta: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 4,
+  },
+  unreadBadge: {
+    backgroundColor: "#2563EB",
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  unreadText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "bold",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+    gap: 8,
+  },
+  headerBack: {
+    flexShrink: 0,
   },
   backText: {
     fontSize: 16,
@@ -218,17 +428,33 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   headerCenter: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    minWidth: 0,
+  },
+  headerTextWrap: {
+    flex: 1,
+    flexShrink: 1,
   },
   mechanicAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  mechanicAvatarSmall: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: "#2563EB",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   mechanicAvatarText: {
     color: "#fff",
@@ -243,6 +469,9 @@ const styles = StyleSheet.create({
   mechanicStatus: {
     fontSize: 12,
     color: "#16A34A",
+  },
+  callBtn: {
+    flexShrink: 0,
   },
   callText: {
     fontSize: 24,
@@ -285,6 +514,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   smallAvatarText: {
     color: "#fff",
@@ -295,6 +525,7 @@ const styles = StyleSheet.create({
     maxWidth: "75%",
     borderRadius: 18,
     padding: 12,
+    flexShrink: 1,
   },
   userBubble: {
     backgroundColor: "#2563EB",
@@ -312,6 +543,7 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 15,
     lineHeight: 22,
+    flexWrap: "wrap",
   },
   userMessageText: {
     color: "#fff",
@@ -358,6 +590,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   sendButtonDisabled: {
     backgroundColor: "#BFDBFE",

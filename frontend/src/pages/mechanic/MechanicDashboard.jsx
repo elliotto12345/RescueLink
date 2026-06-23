@@ -8,8 +8,10 @@ import {
   StatusBar,
   ScrollView,
 } from "react-native";
-import { connectSocket } from "../utils/socket";
-import { getUser } from "../utils/storage";
+import { connectSocket } from "../../services/socket";
+import { getUser } from "../../services/storage";
+import BottomNav from "../../components/layout/BottomNav";
+import { PROVIDER_NAV } from "../../constants/navigation";
 
 const completedJobs = [
   {
@@ -200,31 +202,20 @@ export default function MechanicDashboard({ navigation }) {
         )}
       </ScrollView>
 
-      {/* Bottom Nav */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navEmoji}>🏠</Text>
-          <Text style={styles.navTextActive}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navEmoji}>📋</Text>
-          <Text style={styles.navText}>Jobs</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate("Chat")}
-        >
-          <Text style={styles.navEmoji}>💬</Text>
-          <Text style={styles.navText}>Chat</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate("Profile")}
-        >
-          <Text style={styles.navEmoji}>👤</Text>
-          <Text style={styles.navText}>Profile</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav
+        items={PROVIDER_NAV}
+        activeId={activeTab === "requests" ? "home" : "jobs"}
+        navigation={navigation}
+        onItemPress={(item) => {
+          if (item.route) {
+            navigation.navigate(item.route);
+          } else if (item.id === "home") {
+            setActiveTab("requests");
+          } else if (item.id === "jobs") {
+            setActiveTab("completed");
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -489,40 +480,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#16A34A",
     fontWeight: "bold",
-  },
-  bottomNav: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    paddingVertical: 12,
-    paddingBottom: 24,
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  navEmoji: {
-    fontSize: 22,
-  },
-  navText: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    marginTop: 2,
-  },
-  navTextActive: {
-    fontSize: 11,
-    color: "#2563EB",
-    fontWeight: "600",
-    marginTop: 2,
   },
 });

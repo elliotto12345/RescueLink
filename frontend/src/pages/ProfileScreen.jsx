@@ -11,12 +11,14 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { getUser, clearSession } from "../utils/storage";
-import { logoutUser } from "../utils/authService";
 import { doc, updateDoc } from "firebase/firestore";
-import { db } from "../utils/firebase";
+import { getUser } from "../services/storage";
+import { logoutUser } from "../services/authService";
+import { useAuth } from "../contexts/AuthContext";
+import { db } from "../firebase/config";
 
 export default function ProfileScreen({ navigation }) {
+  const { signOut } = useAuth();
   const [user, setUser] = useState(null);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
@@ -45,7 +47,7 @@ export default function ProfileScreen({ navigation }) {
         style: "destructive",
         onPress: async () => {
           await logoutUser();
-          await clearSession();
+          await signOut();
           navigation.reset({
             index: 0,
             routes: [{ name: "Home" }],

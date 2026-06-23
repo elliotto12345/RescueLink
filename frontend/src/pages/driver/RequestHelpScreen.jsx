@@ -12,18 +12,15 @@ import {
   Alert,
 } from "react-native";
 import * as Location from "expo-location";
-import { createRequest } from "../utils/api";
-import { getUser } from "../utils/storage";
-import { connectSocket } from "../utils/socket";
-
-const issueTypes = [
-  { id: 1, label: "Flat Tyre", emoji: "🛞" },
-  { id: 2, label: "Engine Issue", emoji: "⚙️" },
-  { id: 3, label: "Dead Battery", emoji: "🔋" },
-  { id: 4, label: "Overheating", emoji: "🌡️" },
-  { id: 5, label: "Fuel Empty", emoji: "⛽" },
-  { id: 6, label: "Other", emoji: "🔧" },
-];
+import { createRequest, getNearbyMechanics } from "../../services/api";
+import { getUser } from "../../services/storage";
+import { connectSocket } from "../../services/socket";
+import { NEARBY_MECHANICS } from "../../data/sampleData";
+import {
+  formatDistance,
+  sortMechanicsByDistance,
+} from "../../utils/location";
+import { ISSUE_TYPES } from "../../constants/issueTypes";
 
 export default function RequestHelpScreen({ navigation }) {
   const [selectedIssue, setSelectedIssue] = useState(null);
@@ -31,6 +28,10 @@ export default function RequestHelpScreen({ navigation }) {
   const [locating, setLocating] = useState(false);
   const [location, setLocation] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [step, setStep] = useState("form");
+  const [loadingMechanics, setLoadingMechanics] = useState(false);
+  const [mechanics, setMechanics] = useState([]);
+  const [selectedMechanic, setSelectedMechanic] = useState(null);
 
   const handleGetLocation = async () => {
     setLocating(true);
@@ -71,7 +72,7 @@ export default function RequestHelpScreen({ navigation }) {
     }
   };
 
-  const handleSubmit = async () => {
+  const loadNearbyMechanics = async () => {
     if (!selectedIssue) {
       Alert.alert("Error", "Please select an issue type");
       return;
@@ -81,10 +82,50 @@ export default function RequestHelpScreen({ navigation }) {
       return;
     }
 
+    setLoadingMechanics(true);
+    try {
+      let nearby = [];
+      try {
+        const response = await getNearbyMechanics(location.lat, location.lon);
+        nearby = response.data?.mechanics || response.data || [];
+      } catch {
+        nearby = NEARBY_MECHANICS;
+      }
+
+      if (!nearby.length) {
+        nearby = NEARBY_MECHANICS;
+      }
+
+      const normalized = nearby.map((m) => ({
+        ...m,
+        latitude: m.latitude ?? m.lat,
+        longitude: m.longitude ?? m.lon ?? m.lng,
+      }));
+
+      const withDistance = sortMechanicsByDistance(
+        normalized,
+        location.lat,
+        location.lon,
+      );
+      setMechanics(withDistance);
+      setStep("pickMechanic");
+    } catch (error) {
+      Alert.alert("Error", "Could not load nearby mechanics. Please try again.");
+    } finally {
+      setLoadingMechanics(false);
+    }
+  };
+
+  const handleConfirmRequest = async () => {
+    if (!selectedMechanic) {
+      Alert.alert("Error", "Please select a mechanic to continue");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const user = await getUser();
-      const issueLabel = issueTypes.find((i) => i.id === selectedIssue)?.label;
+      const issueLabel = ISSUE_TYPES.find((i) => i.id === selectedIssue)?.label;
 
       const response = await createRequest({
         userId: user.id,
@@ -92,9 +133,9 @@ export default function RequestHelpScreen({ navigation }) {
         latitude: location.lat,
         longitude: location.lon,
         description,
+        mechanicId: selectedMechanic.id,
       });
 
-      // Emit to socket so mechanics see it instantly
       const socket = connectSocket(user?.id);
       socket.emit("newRequest", {
         id: response.data.request.id,
@@ -104,9 +145,11 @@ export default function RequestHelpScreen({ navigation }) {
         latitude: location.lat,
         longitude: location.lon,
         description,
+        mechanicId: selectedMechanic.id,
+        mechanicName: selectedMechanic.name,
       });
 
-      navigation.navigate("TrackMechanic");
+      navigation.navigate("TrackMechanic", { mechanic: selectedMechanic });
     } catch (error) {
       Alert.alert("Error", "Could not submit request. Please try again.");
     } finally {
@@ -114,20 +157,117 @@ export default function RequestHelpScreen({ navigation }) {
     }
   };
 
+  if (step === "pickMechanic") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" />
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => {
+                setStep("form");
+                setSelectedMechanic(null);
+              }}
+            >
+              <Text style={styles.backText}>← Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              Choose a Mechanic
+            </Text>
+            <View style={{ width: 50 }} />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>📍 Nearby Mechanics</Text>
+            <Text style={styles.sectionHint}>
+              Sorted by distance from your location. Tap to select who should
+              handle your request.
+            </Text>
+
+            {mechanics.map((mechanic) => {
+              const isSelected = selectedMechanic?.id === mechanic.id;
+              const isBusy = mechanic.status === "busy";
+
+              return (
+                <TouchableOpacity
+                  key={mechanic.id}
+                  style={[
+                    styles.mechanicCard,
+                    isSelected && styles.mechanicCardSelected,
+                    isBusy && styles.mechanicCardBusy,
+                  ]}
+                  onPress={() => !isBusy && setSelectedMechanic(mechanic)}
+                  disabled={isBusy}
+                >
+                  <View style={styles.mechanicAvatar}>
+                    <Text style={styles.mechanicAvatarText}>
+                      {mechanic.name.charAt(0)}
+                    </Text>
+                  </View>
+                  <View style={styles.mechanicInfo}>
+                    <Text style={styles.mechanicName} numberOfLines={1}>
+                      {mechanic.name}
+                    </Text>
+                    <Text style={styles.mechanicMeta} numberOfLines={1}>
+                      ⭐ {mechanic.rating} • {mechanic.jobs} jobs
+                    </Text>
+                    <Text style={styles.mechanicSpecialty} numberOfLines={2}>
+                      {mechanic.specialties?.join(" · ") || "General repair"}
+                    </Text>
+                  </View>
+                  <View style={styles.mechanicRight}>
+                    <Text style={styles.mechanicDistance}>
+                      {formatDistance(mechanic.distanceKm)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.mechanicStatus,
+                        isBusy && styles.mechanicStatusBusy,
+                      ]}
+                    >
+                      {isBusy ? "Busy" : isSelected ? "Selected ✓" : "Available"}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.submitButton,
+              (!selectedMechanic || submitting) && { opacity: 0.7 },
+            ]}
+            onPress={handleConfirmRequest}
+            disabled={!selectedMechanic || submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.submitButtonText}>
+                Request {selectedMechanic?.name?.split(" ")[0] || "Mechanic"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Request Help</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            Request Help
+          </Text>
           <View style={{ width: 50 }} />
         </View>
 
-        {/* Location Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📍 Your Location</Text>
           {location ? (
@@ -165,11 +305,10 @@ export default function RequestHelpScreen({ navigation }) {
           )}
         </View>
 
-        {/* Issue Type */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🔧 What's the Issue?</Text>
           <View style={styles.issueGrid}>
-            {issueTypes.map((issue) => (
+            {ISSUE_TYPES.map((issue) => (
               <TouchableOpacity
                 key={issue.id}
                 style={[
@@ -184,6 +323,7 @@ export default function RequestHelpScreen({ navigation }) {
                     styles.issueLabel,
                     selectedIssue === issue.id && styles.issueLabelActive,
                   ]}
+                  numberOfLines={2}
                 >
                   {issue.label}
                 </Text>
@@ -192,7 +332,6 @@ export default function RequestHelpScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Description */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📝 Describe the Problem</Text>
           <TextInput
@@ -206,17 +345,16 @@ export default function RequestHelpScreen({ navigation }) {
           />
         </View>
 
-        {/* Submit */}
         <TouchableOpacity
-          style={[styles.submitButton, submitting && { opacity: 0.7 }]}
-          onPress={handleSubmit}
-          disabled={submitting}
+          style={[styles.submitButton, loadingMechanics && { opacity: 0.7 }]}
+          onPress={loadNearbyMechanics}
+          disabled={loadingMechanics}
         >
-          {submitting ? (
+          {loadingMechanics ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.submitButtonText}>
-              🚨 Find Nearest Mechanic
+              🔍 Find Nearest Mechanics
             </Text>
           )}
         </TouchableOpacity>
@@ -244,11 +382,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#2563EB",
     fontWeight: "600",
+    flexShrink: 0,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 18,
     fontWeight: "bold",
     color: "#1F2937",
+    textAlign: "center",
+    marginHorizontal: 8,
   },
   section: {
     paddingHorizontal: 24,
@@ -259,6 +401,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#1F2937",
     marginBottom: 12,
+  },
+  sectionHint: {
+    fontSize: 14,
+    color: "#6B7280",
+    lineHeight: 20,
+    marginBottom: 16,
   },
   locationButton: {
     backgroundColor: "#2563EB",
@@ -289,14 +437,17 @@ const styles = StyleSheet.create({
   },
   locationEmoji: {
     fontSize: 24,
+    flexShrink: 0,
   },
   locationInfo: {
     flex: 1,
+    flexShrink: 1,
   },
   locationAddress: {
     fontSize: 15,
     fontWeight: "600",
     color: "#1F2937",
+    flexWrap: "wrap",
   },
   locationCoords: {
     fontSize: 12,
@@ -305,6 +456,7 @@ const styles = StyleSheet.create({
   },
   refreshText: {
     fontSize: 20,
+    flexShrink: 0,
   },
   issueGrid: {
     flexDirection: "row",
@@ -313,6 +465,8 @@ const styles = StyleSheet.create({
   },
   issueCard: {
     width: "30%",
+    minWidth: 96,
+    flexGrow: 1,
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
@@ -333,6 +487,7 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontWeight: "600",
     textAlign: "center",
+    flexWrap: "wrap",
   },
   issueLabelActive: {
     color: "#2563EB",
@@ -345,7 +500,7 @@ const styles = StyleSheet.create({
     color: "#1F2937",
     borderWidth: 1.5,
     borderColor: "#E5E7EB",
-    height: 120,
+    minHeight: 120,
     textAlignVertical: "top",
   },
   submitButton: {
@@ -360,5 +515,76 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+    textAlign: "center",
+  },
+  mechanicCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    gap: 12,
+  },
+  mechanicCardSelected: {
+    borderColor: "#2563EB",
+    backgroundColor: "#EFF6FF",
+  },
+  mechanicCardBusy: {
+    opacity: 0.55,
+  },
+  mechanicAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  mechanicAvatarText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  mechanicInfo: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  mechanicName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1F2937",
+  },
+  mechanicMeta: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  mechanicSpecialty: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 4,
+    flexWrap: "wrap",
+  },
+  mechanicRight: {
+    alignItems: "flex-end",
+    flexShrink: 0,
+  },
+  mechanicDistance: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#2563EB",
+  },
+  mechanicStatus: {
+    fontSize: 11,
+    color: "#16A34A",
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  mechanicStatusBusy: {
+    color: "#DC2626",
   },
 });

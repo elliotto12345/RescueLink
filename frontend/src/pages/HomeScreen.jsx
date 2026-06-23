@@ -6,178 +6,247 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  ScrollView,
 } from "react-native";
+import Button from "../components/common/Button";
+import Card from "../components/common/Card";
+import {
+  LANDING_FEATURES,
+  HOW_IT_WORKS,
+  TESTIMONIALS,
+} from "../data/sampleData";
+import { colors, radius, spacing } from "../constants/theme";
 
 export default function HomeScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.logo}>RescueLink</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("Login")}>
+            <Text style={styles.loginText}>Login</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.logo}>RescueLink</Text>
-        <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-          <Text style={styles.loginText}>Login</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Hero */}
+        <View style={styles.hero}>
+          <Text style={styles.emoji}>🚗🔧</Text>
+          <Text style={styles.title}>Stuck on the Road?</Text>
+          <Text style={styles.subtitle}>
+            AI-assisted roadside rescue. Connect to verified mechanics in
+            seconds — fast, reliable, 24/7.
+          </Text>
+          <Button
+            title="Get Help Now 🚨"
+            onPress={() => navigation.navigate("Register")}
+            style={styles.heroBtn}
+          />
+          <Button
+            title="I'm a Service Provider 🔧"
+            variant="outline"
+            onPress={() => navigation.navigate("Register")}
+          />
+        </View>
 
-      {/* Hero */}
-      <View style={styles.hero}>
-        <Text style={styles.emoji}>🚗🔧</Text>
-        <Text style={styles.title}>Stuck on the Road?</Text>
-        <Text style={styles.subtitle}>
-          Connect to the nearest verified mechanic in seconds. Fast, reliable,
-          and available 24/7.
+        {/* Stats */}
+        <View style={styles.stats}>
+          {[
+            { num: "24/7", label: "Available" },
+            { num: "5 min", label: "Response" },
+            { num: "1000+", label: "Providers" },
+          ].map((stat, i) => (
+            <React.Fragment key={stat.label}>
+              {i > 0 && <View style={styles.statDivider} />}
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{stat.num}</Text>
+                <Text style={styles.statLabel}>{stat.label}</Text>
+              </View>
+            </React.Fragment>
+          ))}
+        </View>
+
+        {/* Features */}
+        <Text style={styles.sectionTitle}>Why RescueLink?</Text>
+        <View style={styles.features}>
+          {LANDING_FEATURES.map((feature) => (
+            <Card key={feature.title} style={styles.featureCard}>
+              <Text style={styles.featureEmoji}>{feature.emoji}</Text>
+              <Text style={styles.featureTitle}>{feature.title}</Text>
+              <Text style={styles.featureDesc}>{feature.description}</Text>
+            </Card>
+          ))}
+        </View>
+
+        {/* How it works */}
+        <Text style={styles.sectionTitle}>How It Works</Text>
+        <View style={styles.steps}>
+          {HOW_IT_WORKS.map((step) => (
+            <View key={step.step} style={styles.stepRow}>
+              <View style={styles.stepNum}>
+                <Text style={styles.stepNumText}>{step.step}</Text>
+              </View>
+              <View style={styles.stepContent}>
+                <Text style={styles.stepTitle}>{step.title}</Text>
+                <Text style={styles.stepDesc}>{step.description}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* AI Section */}
+        <Card style={styles.aiCard}>
+          <Text style={styles.aiEmoji}>🤖</Text>
+          <Text style={styles.aiTitle}>AI Fault Diagnosis</Text>
+          <Text style={styles.aiDesc}>
+            Describe your vehicle symptoms and get instant AI-powered diagnosis,
+            recommended service type, and confidence scores.
+          </Text>
+        </Card>
+
+        {/* Testimonials */}
+        <Text style={styles.sectionTitle}>What Users Say</Text>
+        {TESTIMONIALS.map((t) => (
+          <Card key={t.name} style={styles.testimonial}>
+            <Text style={styles.testimonialStars}>{"⭐".repeat(t.rating)}</Text>
+            <Text style={styles.testimonialText}>"{t.text}"</Text>
+            <Text style={styles.testimonialName}>
+              — {t.name}, {t.role}
+            </Text>
+          </Card>
+        ))}
+
+        {/* Contact */}
+        <Card style={styles.contact}>
+          <Text style={styles.contactTitle}>Contact Us</Text>
+          <Text style={styles.contactText}>📧 support@rescuelink.com</Text>
+          <Text style={styles.contactText}>📞 +233 30 000 0000</Text>
+          <Text style={styles.contactText}>📍 Accra, Ghana</Text>
+        </Card>
+
+        <Text style={styles.footer}>
+          © 2025 RescueLink. All rights reserved.
         </Text>
-      </View>
-
-      {/* Buttons */}
-      <View style={styles.buttonGroup}>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => navigation.navigate("Register")}
-        >
-          <Text style={styles.primaryButtonText}>Get Help Now 🚨</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={() => navigation.navigate("Login")}
-        >
-          <Text style={styles.secondaryButtonText}>I'm a Mechanic 🔧</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Stats */}
-      <View style={styles.stats}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>24/7</Text>
-          <Text style={styles.statLabel}>Available</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>5 min</Text>
-          <Text style={styles.statLabel}>Response Time</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>1000+</Text>
-          <Text style={styles.statLabel}>Mechanics</Text>
-        </View>
-      </View>
-
-      {/* Footer */}
-      <Text style={styles.footer}>© 2025 RescueLink. All rights reserved.</Text>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 24,
-  },
+  container: { flex: 1, backgroundColor: colors.white },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 16,
-    paddingTop: 20,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
   },
-  logo: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#2563EB",
-  },
-  loginText: {
-    fontSize: 16,
-    color: "#2563EB",
-    fontWeight: "600",
-  },
-  hero: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
-  },
-  emoji: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
+  logo: { fontSize: 22, fontWeight: "bold", color: colors.primary },
+  loginText: { fontSize: 16, color: colors.primary, fontWeight: "600" },
+  hero: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  emoji: { fontSize: 64, textAlign: "center", marginBottom: spacing.lg },
   title: {
     fontSize: 32,
     fontWeight: "bold",
-    color: "#1F2937",
+    color: colors.text,
     textAlign: "center",
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   subtitle: {
     fontSize: 16,
-    color: "#6B7280",
+    color: colors.textSecondary,
     textAlign: "center",
     lineHeight: 24,
+    marginBottom: spacing.xl,
   },
-  buttonGroup: {
-    gap: 12,
-    marginBottom: 24,
-    paddingHorizontal: 8,
-  },
-  primaryButton: {
-    backgroundColor: "#2563EB",
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  secondaryButton: {
-    borderWidth: 2,
-    borderColor: "#2563EB",
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  secondaryButtonText: {
-    color: "#2563EB",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
+  heroBtn: { marginBottom: spacing.md },
   stats: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#EFF6FF",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    marginHorizontal: 8,
+    marginHorizontal: spacing.xl,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.xl,
   },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: "#BFDBFE",
-  },
-  statNumber: {
+  statItem: { flex: 1, alignItems: "center" },
+  statDivider: { width: 1, height: 40, backgroundColor: "#BFDBFE" },
+  statNumber: { fontSize: 20, fontWeight: "bold", color: colors.primary },
+  statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
+  sectionTitle: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#2563EB",
+    color: colors.text,
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
   },
-  statLabel: {
+  features: {
+    paddingHorizontal: spacing.xl,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  featureCard: { width: "47%", marginBottom: 0 },
+  featureEmoji: { fontSize: 28, marginBottom: spacing.sm },
+  featureTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: colors.text,
+    flexWrap: "wrap",
+  },
+  featureDesc: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 4,
+    flexWrap: "wrap",
+    lineHeight: 18,
   },
+  steps: { paddingHorizontal: spacing.xl, marginBottom: spacing.xl },
+  stepRow: { flexDirection: "row", marginBottom: spacing.lg },
+  stepNum: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: spacing.md,
+  },
+  stepNumText: { color: colors.white, fontWeight: "bold" },
+  stepContent: { flex: 1 },
+  stepTitle: { fontSize: 16, fontWeight: "bold", color: colors.text },
+  stepDesc: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
+  aiCard: {
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.xl,
+    backgroundColor: colors.primaryLight,
+  },
+  aiEmoji: { fontSize: 40, marginBottom: spacing.sm },
+  aiTitle: { fontSize: 18, fontWeight: "bold", color: colors.text },
+  aiDesc: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
+  testimonial: { marginHorizontal: spacing.xl, marginBottom: spacing.md },
+  testimonialStars: { marginBottom: spacing.sm },
+  testimonialText: {
+    fontSize: 14,
+    color: colors.text,
+    fontStyle: "italic",
+    lineHeight: 22,
+    flexWrap: "wrap",
+  },
+  testimonialName: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+    fontWeight: "600",
+  },
+  contact: { marginHorizontal: spacing.xl, marginBottom: spacing.xl },
+  contactTitle: { fontSize: 18, fontWeight: "bold", color: colors.text },
+  contactText: { fontSize: 14, color: colors.textSecondary, marginTop: 8 },
   footer: {
     textAlign: "center",
-    color: "#9CA3AF",
+    color: colors.textMuted,
     fontSize: 12,
-    marginBottom: 16,
+    marginBottom: spacing.xl,
   },
 });

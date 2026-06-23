@@ -11,11 +11,14 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
-import { connectSocket, disconnectSocket } from "../utils/socket";
-import { getUser } from "../utils/storage";
+import { connectSocket, disconnectSocket } from "../../services/socket";
+import { getUser } from "../../services/storage";
+import { NEARBY_MECHANICS } from "../../data/sampleData";
 
-export default function TrackMechanicScreen({ navigation }) {
-  const [status, setStatus] = useState("Searching");
+export default function TrackMechanicScreen({ navigation, route }) {
+  const selectedMechanic = route.params?.mechanic;
+  const mechanic = selectedMechanic || NEARBY_MECHANICS[0];
+  const [status, setStatus] = useState(selectedMechanic ? "Found" : "Searching");
   const [userLocation, setUserLocation] = useState(null);
   const [mechanicLocation, setMechanicLocation] = useState(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -65,8 +68,8 @@ export default function TrackMechanicScreen({ navigation }) {
       setUserLocation(userCoords);
 
       setMechanicLocation({
-        latitude: location.coords.latitude + 0.01,
-        longitude: location.coords.longitude + 0.01,
+        latitude: mechanic?.latitude || location.coords.latitude + 0.01,
+        longitude: mechanic?.longitude || location.coords.longitude + 0.01,
       });
     } catch (error) {
       setUserLocation({
@@ -103,8 +106,10 @@ export default function TrackMechanicScreen({ navigation }) {
     });
 
     // Simulate for testing
-    setTimeout(() => setStatus("Found"), 3000);
-    setTimeout(() => setStatus("OnTheWay"), 6000);
+    if (!selectedMechanic) {
+      setTimeout(() => setStatus("Found"), 3000);
+    }
+    setTimeout(() => setStatus("OnTheWay"), selectedMechanic ? 3000 : 6000);
   };
 
   const getStatusInfo = () => {
@@ -191,7 +196,7 @@ export default function TrackMechanicScreen({ navigation }) {
               {mechanicLocation && status !== "Searching" && (
                 <Marker
                   coordinate={mechanicLocation}
-                  title="Kwame Mensah"
+                  title={mechanic.name}
                   description="Your mechanic"
                 >
                   <View style={styles.mechanicMarker}>
@@ -214,12 +219,20 @@ export default function TrackMechanicScreen({ navigation }) {
             <Text style={styles.mechanicCardTitle}>Your Mechanic</Text>
             <View style={styles.mechanicInfo}>
               <View style={styles.mechanicAvatar}>
-                <Text style={styles.mechanicAvatarText}>K</Text>
+                <Text style={styles.mechanicAvatarText}>
+                  {mechanic.name.charAt(0)}
+                </Text>
               </View>
               <View style={styles.mechanicDetails}>
-                <Text style={styles.mechanicName}>Kwame Mensah</Text>
-                <Text style={styles.mechanicRating}>⭐ 4.8 • 120 jobs</Text>
-                <Text style={styles.mechanicPhone}>📞 +233 24 123 4567</Text>
+                <Text style={styles.mechanicName} numberOfLines={1}>
+                  {mechanic.name}
+                </Text>
+                <Text style={styles.mechanicRating} numberOfLines={1}>
+                  ⭐ {mechanic.rating} • {mechanic.jobs} jobs
+                </Text>
+                <Text style={styles.mechanicPhone} numberOfLines={1}>
+                  📞 {mechanic.phone}
+                </Text>
               </View>
               <View style={styles.etaContainer}>
                 <Text style={styles.etaTime}>8 min</Text>
@@ -301,10 +314,22 @@ export default function TrackMechanicScreen({ navigation }) {
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.chatButton}
-              onPress={() => navigation.navigate("Chat")}
+              onPress={() => navigation.navigate("Chat", { mechanic })}
             >
               <Text style={styles.chatButtonText}>💬 Chat with Mechanic</Text>
             </TouchableOpacity>
+            {status === "OnTheWay" && (
+              <TouchableOpacity
+                style={styles.rateButton}
+                onPress={() =>
+                  navigation.navigate("Ratings", {
+                    providerName: mechanic.name,
+                  })
+                }
+              >
+                <Text style={styles.rateButtonText}>⭐ Rate This Service</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.cancelButton}>
               <Text style={styles.cancelButtonText}>Cancel Request</Text>
             </TouchableOpacity>
@@ -359,6 +384,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B7280",
     textAlign: "center",
+    flexWrap: "wrap",
+    paddingHorizontal: 8,
   },
   mapContainer: {
     marginHorizontal: 24,
@@ -435,6 +462,7 @@ const styles = StyleSheet.create({
   },
   mechanicDetails: {
     flex: 1,
+    flexShrink: 1,
   },
   mechanicName: {
     fontSize: 16,
@@ -498,11 +526,14 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 4,
   },
   timelineEvent: {
     fontSize: 14,
     color: "#1F2937",
     fontWeight: "600",
+    flexShrink: 1,
   },
   timelineTime: {
     fontSize: 12,
@@ -530,6 +561,21 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+    textAlign: "center",
+  },
+  rateButton: {
+    backgroundColor: "#FEF3C7",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#F59E0B",
+  },
+  rateButtonText: {
+    color: "#B45309",
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
   },
   cancelButton: {
     borderWidth: 1.5,

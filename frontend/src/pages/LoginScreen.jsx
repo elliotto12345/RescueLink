@@ -1,26 +1,29 @@
 import React, { useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
   SafeAreaView,
   StatusBar,
-  ActivityIndicator,
-  Alert,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { loginUser } from "../utils/authService";
-import { saveUser } from "../utils/storage";
+import Input from "../components/common/Input";
+import Button from "../components/common/Button";
+import ScreenHeader from "../components/layout/ScreenHeader";
+import { loginUser } from "../services/authService";
+import { useAuth } from "../contexts/AuthContext";
+import { getDashboardForRole } from "../constants/roles";
+import { colors } from "../constants/theme";
 
 export default function LoginScreen({ navigation }) {
+  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showResend, setShowResend] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -31,16 +34,9 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     try {
       const { user } = await loginUser(email, password);
-      await saveUser(user, user.id);
+      await signIn(user);
       Alert.alert("Success", `Welcome back ${user.name}! 👋`);
-
-      if (user.role === "mechanic") {
-        navigation.navigate("MechanicDashboard");
-      } else if (user.role === "admin") {
-        navigation.navigate("AdminDashboard");
-      } else {
-        navigation.navigate("UserDashboard");
-      }
+      navigation.replace(getDashboardForRole(user.role));
     } catch (error) {
       Alert.alert("Error", "Invalid email or password. Please try again.");
     } finally {
@@ -56,57 +52,36 @@ export default function LoginScreen({ navigation }) {
         style={styles.flex}
       >
         <ScrollView showsVerticalScrollIndicator={false}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backText}>← Back</Text>
-          </TouchableOpacity>
-
-          <View style={styles.titleSection}>
-            <Text style={styles.title}>Welcome Back 👋</Text>
-            <Text style={styles.subtitle}>
-              Login to your RescueLink account
-            </Text>
-          </View>
+          <ScreenHeader
+            title="Welcome Back 👋"
+            subtitle="Login to your RescueLink account"
+            onBack={() => navigation.goBack()}
+          />
 
           <View style={styles.form}>
-            <Text style={styles.label}>Email Address</Text>
-            <TextInput
-              style={styles.input}
+            <Input
+              label="Email Address"
               placeholder="Enter your email"
-              placeholderTextColor="#9CA3AF"
               keyboardType="email-address"
-              autoCapitalize="none"
               value={email}
               onChangeText={setEmail}
             />
-
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
+            <Input
+              label="Password"
               placeholder="Enter your password"
-              placeholderTextColor="#9CA3AF"
               secureTextEntry
               value={password}
               onChangeText={setPassword}
             />
 
-            <TouchableOpacity style={styles.forgotPassword}>
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              onPress={() => navigation.navigate("ForgotPassword")}
+            >
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.loginButton, loading && { opacity: 0.7 }]}
-              onPress={handleLogin}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.loginButtonText}>Login</Text>
-              )}
-            </TouchableOpacity>
+            <Button title="Login" onPress={handleLogin} loading={loading} />
 
             <View style={styles.registerRow}>
               <Text style={styles.registerText}>Don't have an account? </Text>
@@ -122,91 +97,25 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  flex: {
-    flex: 1,
-  },
-  backButton: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-  },
-  backText: {
-    fontSize: 16,
-    color: "#2563EB",
-    fontWeight: "600",
-  },
-  titleSection: {
-    marginTop: 32,
-    marginBottom: 40,
-    paddingHorizontal: 24,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#1F2937",
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#6B7280",
-  },
-  form: {
-    paddingHorizontal: 24,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1.5,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: "#1F2937",
-    marginBottom: 20,
-    backgroundColor: "#FAFAFA",
-  },
+  container: { flex: 1, backgroundColor: colors.white },
+  flex: { flex: 1 },
+  form: { paddingHorizontal: 24 },
   forgotPassword: {
     alignSelf: "flex-end",
     marginBottom: 24,
     marginTop: -12,
   },
   forgotPasswordText: {
-    color: "#2563EB",
+    color: colors.primary,
     fontSize: 14,
     fontWeight: "600",
-  },
-  loginButton: {
-    backgroundColor: "#2563EB",
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  loginButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
   },
   registerRow: {
     flexDirection: "row",
     justifyContent: "center",
     marginBottom: 32,
+    marginTop: 8,
   },
-  registerText: {
-    color: "#6B7280",
-    fontSize: 14,
-  },
-  registerLink: {
-    color: "#2563EB",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  registerText: { color: colors.textSecondary, fontSize: 14 },
+  registerLink: { color: colors.primary, fontSize: 14, fontWeight: "600" },
 });
