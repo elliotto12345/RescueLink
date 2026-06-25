@@ -8,6 +8,7 @@ import {
   StatusBar,
   ScrollView,
   Animated,
+  Alert,
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
@@ -17,6 +18,7 @@ import { NEARBY_MECHANICS } from "../../data/sampleData";
 
 export default function TrackMechanicScreen({ navigation, route }) {
   const selectedMechanic = route.params?.mechanic;
+  const serviceType = route.params?.service || "Roadside Assistance";
   const mechanic = selectedMechanic || NEARBY_MECHANICS[0];
   const [status, setStatus] = useState(selectedMechanic ? "Found" : "Searching");
   const [userLocation, setUserLocation] = useState(null);
@@ -112,6 +114,64 @@ export default function TrackMechanicScreen({ navigation, route }) {
     setTimeout(() => setStatus("OnTheWay"), selectedMechanic ? 3000 : 6000);
   };
 
+  const handleConfirmMechanicArrived = () => {
+    Alert.alert(
+      "Confirm Arrival",
+      "Has your mechanic arrived at your location?",
+      [
+        { text: "Not Yet", style: "cancel" },
+        {
+          text: "Yes, They've Arrived",
+          onPress: () => setStatus("Arrived"),
+        },
+      ],
+    );
+  };
+
+  const handleConfirmServiceComplete = () => {
+    Alert.alert(
+      "Confirm Service",
+      "Has the mechanic completed the service to your satisfaction?",
+      [
+        { text: "Not Yet", style: "cancel" },
+        {
+          text: "Yes, Completed",
+          onPress: () => {
+            setStatus("Completed");
+            navigation.navigate("Payments", {
+              service: serviceType,
+              provider: mechanic.name,
+              amount: 80,
+              currency: "GHS",
+              fromServiceFlow: true,
+            });
+          },
+        },
+      ],
+    );
+  };
+
+  const handleCancelRequest = () => {
+    Alert.alert(
+      "Cancel Request",
+      "Are you sure you want to cancel this service request?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: () => {
+            disconnectSocket();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "UserDashboard" }],
+            });
+          },
+        },
+      ],
+    );
+  };
+
   const getStatusInfo = () => {
     if (status === "Searching")
       return {
@@ -125,7 +185,7 @@ export default function TrackMechanicScreen({ navigation, route }) {
       return {
         emoji: "✅",
         title: "Mechanic Found!",
-        subtitle: "A mechanic has accepted your request",
+        subtitle: "Tap below when your mechanic arrives",
         color: "#16A34A",
         bg: "#DCFCE7",
       };
@@ -133,9 +193,25 @@ export default function TrackMechanicScreen({ navigation, route }) {
       return {
         emoji: "🚗",
         title: "Mechanic On The Way!",
-        subtitle: "Your mechanic is heading to your location",
+        subtitle: "Tap below when your mechanic arrives",
         color: "#2563EB",
         bg: "#EFF6FF",
+      };
+    if (status === "Arrived")
+      return {
+        emoji: "🔧",
+        title: "Mechanic Has Arrived",
+        subtitle: "Confirm when the service has been completed",
+        color: "#7C3AED",
+        bg: "#EDE9FE",
+      };
+    if (status === "Completed")
+      return {
+        emoji: "✅",
+        title: "Service Completed",
+        subtitle: "Proceed to payment and rate your experience",
+        color: "#16A34A",
+        bg: "#DCFCE7",
       };
   };
 
@@ -284,14 +360,22 @@ export default function TrackMechanicScreen({ navigation, route }) {
                 styles.timelineDot,
                 {
                   backgroundColor:
-                    status === "OnTheWay" ? "#16A34A" : "#E5E7EB",
+                    status === "OnTheWay" ||
+                    status === "Arrived" ||
+                    status === "Completed"
+                      ? "#16A34A"
+                      : "#E5E7EB",
                 },
               ]}
             />
             <View style={styles.timelineContent}>
               <Text style={styles.timelineEvent}>Mechanic On The Way</Text>
               <Text style={styles.timelineTime}>
-                {status === "OnTheWay" ? "Just now" : "Pending..."}
+                {status === "OnTheWay" ||
+                status === "Arrived" ||
+                status === "Completed"
+                  ? "Just now"
+                  : "Pending..."}
               </Text>
             </View>
           </View>
@@ -300,17 +384,31 @@ export default function TrackMechanicScreen({ navigation, route }) {
 
           <View style={styles.timelineItem}>
             <View
-              style={[styles.timelineDot, { backgroundColor: "#E5E7EB" }]}
+              style={[
+                styles.timelineDot,
+                {
+                  backgroundColor:
+                    status === "Arrived" || status === "Completed"
+                      ? "#16A34A"
+                      : "#E5E7EB",
+                },
+              ]}
             />
             <View style={styles.timelineContent}>
               <Text style={styles.timelineEvent}>Issue Resolved</Text>
-              <Text style={styles.timelineTime}>Pending...</Text>
+              <Text style={styles.timelineTime}>
+                {status === "Completed"
+                  ? "Just now"
+                  : status === "Arrived"
+                    ? "Awaiting confirmation"
+                    : "Pending..."}
+              </Text>
             </View>
           </View>
         </View>
 
         {/* Action Buttons */}
-        {status !== "Searching" && (
+        {status !== "Searching" && status !== "Completed" && (
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.chatButton}
@@ -318,19 +416,30 @@ export default function TrackMechanicScreen({ navigation, route }) {
             >
               <Text style={styles.chatButtonText}>💬 Chat with Mechanic</Text>
             </TouchableOpacity>
-            {status === "OnTheWay" && (
+            {(status === "Found" || status === "OnTheWay") && (
               <TouchableOpacity
-                style={styles.rateButton}
-                onPress={() =>
-                  navigation.navigate("Ratings", {
-                    providerName: mechanic.name,
-                  })
-                }
+                style={styles.arrivedButton}
+                onPress={handleConfirmMechanicArrived}
               >
-                <Text style={styles.rateButtonText}>⭐ Rate This Service</Text>
+                <Text style={styles.arrivedButtonText}>
+                  📍 Mechanic Has Arrived
+                </Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.cancelButton}>
+            {status === "Arrived" && (
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={handleConfirmServiceComplete}
+              >
+                <Text style={styles.confirmButtonText}>
+                  ✅ Confirm Service Completed
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={handleCancelRequest}
+            >
               <Text style={styles.cancelButtonText}>Cancel Request</Text>
             </TouchableOpacity>
           </View>
@@ -563,16 +672,30 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
   },
-  rateButton: {
-    backgroundColor: "#FEF3C7",
+  arrivedButton: {
+    backgroundColor: "#EDE9FE",
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
     borderWidth: 1.5,
-    borderColor: "#F59E0B",
+    borderColor: "#7C3AED",
   },
-  rateButtonText: {
-    color: "#B45309",
+  arrivedButtonText: {
+    color: "#6D28D9",
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  confirmButton: {
+    backgroundColor: "#DCFCE7",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#16A34A",
+  },
+  confirmButtonText: {
+    color: "#15803D",
     fontSize: 16,
     fontWeight: "bold",
     textAlign: "center",

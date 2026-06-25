@@ -16,11 +16,14 @@ import StarRating from "../../components/common/StarRating";
 import Input from "../../components/common/Input";
 import SectionTitle from "../../components/layout/SectionTitle";
 import { PROVIDER_REVIEWS } from "../../data/sampleData";
+import { markServiceRated } from "../../services/serviceHistory";
 import { colors } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
 
 function RatingsContent({ navigation, route }) {
   const providerName = route?.params?.providerName || "Kwame Mensah";
+  const fromServiceFlow = route?.params?.fromServiceFlow;
+  const requestId = route?.params?.requestId;
   const serviceType =
     route?.params?.service && route?.params?.date
       ? `${route.params.service} · ${route.params.date}`
@@ -28,13 +31,35 @@ function RatingsContent({ navigation, route }) {
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
 
-  const handleSubmit = () => {
+  const goHome = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "UserDashboard" }],
+    });
+  };
+
+  const finishRating = () => {
+    if (fromServiceFlow) {
+      goHome();
+    } else {
+      navigation.goBack();
+    }
+  };
+
+  const handleSkip = () => {
+    goHome();
+  };
+
+  const handleSubmit = async () => {
     if (rating === 0) {
       Alert.alert("Error", "Please select a star rating");
       return;
     }
+    if (requestId) {
+      await markServiceRated(requestId);
+    }
     Alert.alert("Thank You!", "Your review has been submitted.", [
-      { text: "OK", onPress: () => navigation.goBack() },
+      { text: "OK", onPress: finishRating },
     ]);
   };
 
@@ -67,6 +92,14 @@ function RatingsContent({ navigation, route }) {
             numberOfLines={4}
           />
           <Button title="Submit Review" onPress={handleSubmit} />
+          {fromServiceFlow && (
+            <Button
+              title="Skip for Now"
+              variant="outline"
+              onPress={handleSkip}
+              style={{ marginTop: 12 }}
+            />
+          )}
         </Card>
 
         <SectionTitle>Provider Reviews</SectionTitle>

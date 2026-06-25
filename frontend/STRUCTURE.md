@@ -19,19 +19,6 @@ frontend/src/
 ├── services/            # authService, api, socket, storage (single source of truth)
 ```
 
-## Spec vs Your Implementation
-
-| Spec (document) | Your code |
-|-----------------|-----------|
-| React Vite + Tailwind | **Expo + StyleSheet** — use `constants/theme.js` for colors |
-| React Router | **React Navigation** stack in `navigation/AppNavigator.jsx` |
-| Driver role | `role: "user"` in Firestore |
-| Service Provider | `role: "mechanic"` |
-| AI Diagnosis page | `AIAssistantScreen.jsx` (Groq chat) |
-| Role selection page | Inline on `RegisterScreen` via `RoleSelector` component |
-| Protected routes | `ProtectedScreen` wrapper + `AuthContext` |
-| Context API | `contexts/AuthContext.jsx` |
-
 ## Design Tokens
 
 Edit `constants/theme.js` to change colors app-wide:

@@ -287,26 +287,37 @@ function MechanicChatThread({ mechanic, onBack }) {
 }
 
 export default function ChatScreen({ navigation, route }) {
-  const initialMechanic = route.params?.mechanic ?? null;
-  const [selectedMechanic, setSelectedMechanic] = useState(initialMechanic);
+  const directMechanic = route.params?.mechanic ?? null;
+  const [selectedMechanic, setSelectedMechanic] = useState(directMechanic);
+  const [openedFromList, setOpenedFromList] = useState(false);
 
   useEffect(() => {
     if (route.params?.mechanic) {
       setSelectedMechanic(route.params.mechanic);
+      setOpenedFromList(false);
     }
   }, [route.params?.mechanic]);
+
+  const handleSelectMechanic = (mechanic) => {
+    setOpenedFromList(true);
+    setSelectedMechanic(mechanic);
+  };
+
+  const handleBackFromThread = () => {
+    if (openedFromList || !directMechanic) {
+      setSelectedMechanic(null);
+      setOpenedFromList(false);
+      navigation.setParams({ mechanic: undefined });
+      return;
+    }
+    navigation.goBack();
+  };
 
   if (selectedMechanic) {
     return (
       <MechanicChatThread
         mechanic={selectedMechanic}
-        onBack={() => {
-          if (initialMechanic) {
-            navigation.goBack();
-          } else {
-            setSelectedMechanic(null);
-          }
-        }}
+        onBack={handleBackFromThread}
       />
     );
   }
@@ -314,7 +325,7 @@ export default function ChatScreen({ navigation, route }) {
   return (
     <MechanicChatList
       navigation={navigation}
-      onSelectMechanic={setSelectedMechanic}
+      onSelectMechanic={handleSelectMechanic}
     />
   );
 }

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -8,26 +8,33 @@ import {
   StatusBar,
   ScrollView,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import ProtectedScreen from "../../navigation/ProtectedScreen";
 import BottomNav from "../../components/layout/BottomNav";
 import SectionTitle from "../../components/layout/SectionTitle";
 import Card from "../../components/common/Card";
 import StatusBadge from "../../components/common/StatusBadge";
 import { useAuth } from "../../contexts/AuthContext";
-import { RECENT_REQUESTS } from "../../data/sampleData";
+import { getServiceHistory } from "../../services/serviceHistory";
 import { DRIVER_NAV } from "../../constants/navigation";
 import { colors, shadow, radius } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
 
 const QUICK_ACTIONS = [
   { emoji: "🔧", label: "Find Mechanic", route: "RequestHelp" },
-  { emoji: "⭐", label: "Rate Service", route: "Ratings" },
+  { emoji: "🤖", label: "AI Assistance", route: "AIAssistant" },
   { emoji: "🚨", label: "Emergency", route: "EmergencyCenter" },
-  { emoji: "💳", label: "Payments", route: "Payments" },
 ];
 
 function DashboardContent({ navigation }) {
   const { user } = useAuth();
+  const [requests, setRequests] = useState([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      getServiceHistory().then(setRequests);
+    }, []),
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -77,30 +84,33 @@ function DashboardContent({ navigation }) {
 
         <SectionTitle>Recent Requests</SectionTitle>
         <View style={styles.requestsList}>
-          {RECENT_REQUESTS.map((request) => (
+          {requests.map((request) => (
             <TouchableOpacity
               key={request.id}
-              activeOpacity={request.status === "Completed" ? 0.7 : 1}
+              activeOpacity={
+                request.status === "Completed" && !request.rated ? 0.7 : 1
+              }
               onPress={() => {
-                if (request.status === "Completed") {
+                if (request.status === "Completed" && !request.rated) {
                   navigation.navigate("Ratings", {
                     providerName: request.mechanic,
                     service: request.issue,
                     date: request.date,
+                    requestId: request.id,
                   });
                 }
               }}
             >
               <Card style={styles.requestCard}>
                 <View style={styles.requestLeft}>
-                  <Text style={styles.requestIssue} numberOfLines={-1}>
+                  <Text style={styles.requestIssue}>
                     {request.issue}
                   </Text>
                   <Text style={styles.requestMechanic} numberOfLines={1}>
                     🔧 {request.mechanic}
                   </Text>
                   <Text style={styles.requestDate}>📅 {request.date}</Text>
-                  {request.status === "Completed" && (
+                  {request.status === "Completed" && !request.rated && (
                     <Text style={styles.rateHint}>Tap to rate this service ⭐</Text>
                   )}
                 </View>

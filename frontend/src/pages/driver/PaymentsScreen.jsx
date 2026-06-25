@@ -16,6 +16,7 @@ import Button from "../../components/common/Button";
 import StatusBadge from "../../components/common/StatusBadge";
 import SectionTitle from "../../components/layout/SectionTitle";
 import { PAYMENT_HISTORY } from "../../data/sampleData";
+import { addServiceHistory } from "../../services/serviceHistory";
 import { colors, radius } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
 
@@ -26,15 +27,50 @@ const CURRENT_SERVICE = {
   currency: "GHS",
 };
 
-function PaymentsContent({ navigation }) {
+function PaymentsContent({ navigation, route }) {
   const [method, setMethod] = useState("momo");
+  const fromServiceFlow = route?.params?.fromServiceFlow;
+  const service = route?.params?.service || CURRENT_SERVICE.service;
+  const provider = route?.params?.provider || CURRENT_SERVICE.provider;
+  const amount = route?.params?.amount ?? CURRENT_SERVICE.amount;
+  const currency = route?.params?.currency || CURRENT_SERVICE.currency;
 
   const handlePay = () => {
     Alert.alert(
       "Payment Initiated",
-      `Processing ${CURRENT_SERVICE.currency} ${CURRENT_SERVICE.amount} via ${
+      `Processing ${currency} ${amount} via ${
         method === "momo" ? "Mobile Money" : "Card"
       }.`,
+      fromServiceFlow
+        ? [
+            {
+              text: "OK",
+              onPress: async () => {
+                const date = new Date().toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                });
+                const requestId = Date.now();
+                await addServiceHistory({
+                  id: requestId,
+                  issue: service,
+                  mechanic: provider,
+                  status: "Completed",
+                  date,
+                  rated: false,
+                });
+                navigation.navigate("Ratings", {
+                  providerName: provider,
+                  service,
+                  date,
+                  requestId,
+                  fromServiceFlow: true,
+                });
+              },
+            },
+          ]
+        : undefined,
     );
   };
 
@@ -50,10 +86,10 @@ function PaymentsContent({ navigation }) {
       <ScrollView showsVerticalScrollIndicator={false}>
         <Card style={styles.summary}>
           <CardTitle>Service Summary</CardTitle>
-          <CardSubtitle>{CURRENT_SERVICE.service}</CardSubtitle>
-          <Text style={styles.provider}>🔧 {CURRENT_SERVICE.provider}</Text>
+          <CardSubtitle>{service}</CardSubtitle>
+          <Text style={styles.provider}>🔧 {provider}</Text>
           <Text style={styles.amount}>
-            {CURRENT_SERVICE.currency} {CURRENT_SERVICE.amount}.00
+            {currency} {amount}.00
           </Text>
         </Card>
 
@@ -110,10 +146,10 @@ function PaymentsContent({ navigation }) {
   );
 }
 
-export default function PaymentsScreen({ navigation }) {
+export default function PaymentsScreen({ navigation, route }) {
   return (
     <ProtectedScreen navigation={navigation} allowedRoles={[ROLES.DRIVER]}>
-      <PaymentsContent navigation={navigation} />
+      <PaymentsContent navigation={navigation} route={route} />
     </ProtectedScreen>
   );
 }

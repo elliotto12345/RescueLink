@@ -149,7 +149,10 @@ export default function RequestHelpScreen({ navigation }) {
         mechanicName: selectedMechanic.name,
       });
 
-      navigation.navigate("TrackMechanic", { mechanic: selectedMechanic });
+      navigation.navigate("TrackMechanic", {
+        mechanic: selectedMechanic,
+        service: issueLabel,
+      });
     } catch (error) {
       Alert.alert("Error", "Could not submit request. Please try again.");
     } finally {
