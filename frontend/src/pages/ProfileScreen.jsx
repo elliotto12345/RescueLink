@@ -4,13 +4,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   TextInput,
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { getUser, clearSession } from "../utils/storage";
 import { logoutUser } from "../utils/authService";
 import { doc, updateDoc } from "firebase/firestore";
@@ -38,10 +38,10 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleLogout = async () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
+    Alert.alert("Log out", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Logout",
+        text: "Log out",
         style: "destructive",
         onPress: async () => {
           await logoutUser();
@@ -158,7 +158,7 @@ export default function ProfileScreen({ navigation }) {
         )}
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>🚪 Logout</Text>
+          <Text style={styles.logoutButtonText}>🚪 Log out</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

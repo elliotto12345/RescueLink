@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Alert,
@@ -13,6 +12,7 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { loginUser } from "../utils/authService";
 import { saveUser } from "../utils/storage";
 
@@ -66,7 +66,7 @@ export default function LoginScreen({ navigation }) {
           <View style={styles.titleSection}>
             <Text style={styles.title}>Welcome Back 👋</Text>
             <Text style={styles.subtitle}>
-              Login to your RescueLink account
+              Log in to your RescueLink account
             </Text>
           </View>
 
@@ -104,7 +104,7 @@ export default function LoginScreen({ navigation }) {
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.loginButtonText}>Login</Text>
+                <Text style={styles.loginButtonText}>Log in</Text>
               )}
             </TouchableOpacity>
 

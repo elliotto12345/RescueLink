@@ -4,9 +4,9 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomeScreen({ navigation }) {
   return (
@@ -17,7 +17,7 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.header}>
         <Text style={styles.logo}>RescueLink</Text>
         <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-          <Text style={styles.loginText}>Login</Text>
+          <Text style={styles.loginText}>Log in</Text>
         </TouchableOpacity>
       </View>
 

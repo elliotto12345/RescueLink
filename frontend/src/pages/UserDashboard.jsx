@@ -4,10 +4,10 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { getUser } from "../utils/storage";
 
 export default function UserDashboard({ navigation }) {
@@ -95,13 +95,13 @@ export default function UserDashboard({ navigation }) {
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.quickActions}>
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={styles.actionCard}
             onPress={() => navigation.navigate("RequestHelp")}
           >
             <Text style={styles.actionEmoji}>🔧</Text>
             <Text style={styles.actionText}>Find Mechanic</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           <TouchableOpacity
             style={styles.actionCard}
