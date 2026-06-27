@@ -9,51 +9,9 @@ import {
 } from "react-native";
 import { useState } from "react";
 
-const pendingMechanics = [
-  {
-    id: 1,
-    name: "Kofi Agyeman",
-    phone: "+233 24 567 8901",
-    location: "Kumasi, Ashanti",
-    experience: "5 years",
-    applied: "Today",
-  },
-  {
-    id: 2,
-    name: "Yaw Darko",
-    phone: "+233 20 123 4567",
-    location: "Takoradi, Western",
-    experience: "3 years",
-    applied: "Yesterday",
-  },
-];
+const pendingMechanics = [];
 
-const activeRequests = [
-  {
-    id: 1,
-    user: "John Mensah",
-    mechanic: "Kwame Asante",
-    issue: "Flat Tyre",
-    status: "On The Way",
-    time: "10 mins ago",
-  },
-  {
-    id: 2,
-    user: "Ama Owusu",
-    mechanic: "Pending",
-    issue: "Dead Battery",
-    status: "Searching",
-    time: "2 mins ago",
-  },
-  {
-    id: 3,
-    user: "Kweku Boateng",
-    mechanic: "Fiifi Mensah",
-    issue: "Engine Issue",
-    status: "Arrived",
-    time: "25 mins ago",
-  },
-];
+const activeRequests = [];
 
 export default function AdminDashboard({ navigation }) {
   const [activeTab, setActiveTab] = useState("overview");
@@ -91,22 +49,22 @@ export default function AdminDashboard({ navigation }) {
         <View style={styles.statsGrid}>
           <View style={[styles.statCard, { backgroundColor: "#EFF6FF" }]}>
             <Text style={styles.statEmoji}>📋</Text>
-            <Text style={[styles.statNumber, { color: "#2563EB" }]}>47</Text>
+            <Text style={[styles.statNumber, { color: "#2563EB" }]}>0</Text>
             <Text style={styles.statLabel}>Total Requests Today</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: "#DCFCE7" }]}>
             <Text style={styles.statEmoji}>🔧</Text>
-            <Text style={[styles.statNumber, { color: "#16A34A" }]}>23</Text>
+            <Text style={[styles.statNumber, { color: "#16A34A" }]}>0</Text>
             <Text style={styles.statLabel}>Active Mechanics</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: "#FEF3C7" }]}>
             <Text style={styles.statEmoji}>⏳</Text>
-            <Text style={[styles.statNumber, { color: "#D97706" }]}>3</Text>
+            <Text style={[styles.statNumber, { color: "#D97706" }]}>0</Text>
             <Text style={styles.statLabel}>Pending Verifications</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: "#FEF2F2" }]}>
             <Text style={styles.statEmoji}>🚨</Text>
-            <Text style={[styles.statNumber, { color: "#EF4444" }]}>2</Text>
+            <Text style={[styles.statNumber, { color: "#EF4444" }]}>0</Text>
             <Text style={styles.statLabel}>Active SOS Requests</Text>
           </View>
         </View>
@@ -158,7 +116,10 @@ export default function AdminDashboard({ navigation }) {
         {activeTab === "overview" && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Active Requests</Text>
-            {activeRequests.map((request) => (
+            {activeRequests.length === 0 ? (
+              <Text style={styles.emptyText}>No active requests.</Text>
+            ) : (
+              activeRequests.map((request) => (
               <View key={request.id} style={styles.requestCard}>
                 <View style={styles.requestTop}>
                   <View style={styles.requestLeft}>
@@ -186,7 +147,8 @@ export default function AdminDashboard({ navigation }) {
                   </View>
                 </View>
               </View>
-            ))}
+            ))
+            )}
           </View>
         )}
 
@@ -194,7 +156,10 @@ export default function AdminDashboard({ navigation }) {
         {activeTab === "mechanics" && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Pending Verifications</Text>
-            {pendingMechanics.map((mechanic) => (
+            {pendingMechanics.length === 0 ? (
+              <Text style={styles.emptyText}>No pending verifications.</Text>
+            ) : (
+              pendingMechanics.map((mechanic) => (
               <View key={mechanic.id} style={styles.mechanicCard}>
                 <View style={styles.mechanicHeader}>
                   <View style={styles.mechanicAvatar}>
@@ -227,7 +192,8 @@ export default function AdminDashboard({ navigation }) {
                   </TouchableOpacity>
                 </View>
               </View>
-            ))}
+            ))
+            )}
           </View>
         )}
 
@@ -235,68 +201,9 @@ export default function AdminDashboard({ navigation }) {
         {activeTab === "analytics" && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Platform Analytics</Text>
-
-            {/* Response Time */}
-            <View style={styles.analyticsCard}>
-              <Text style={styles.analyticsTitle}>
-                ⚡ Average Response Time
-              </Text>
-              <Text style={styles.analyticsValue}>8 seconds</Text>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: "85%" }]} />
-              </View>
-              <Text style={styles.analyticsNote}>
-                85% faster than industry average
-              </Text>
-            </View>
-
-            {/* Acceptance Rate */}
-            <View style={styles.analyticsCard}>
-              <Text style={styles.analyticsTitle}>
-                ✅ Mechanic Acceptance Rate
-              </Text>
-              <Text style={styles.analyticsValue}>91%</Text>
-              <View style={styles.progressBar}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: "91%", backgroundColor: "#16A34A" },
-                  ]}
-                />
-              </View>
-              <Text style={styles.analyticsNote}>High mechanic engagement</Text>
-            </View>
-
-            {/* Common Issues */}
-            <View style={styles.analyticsCard}>
-              <Text style={styles.analyticsTitle}>🔧 Most Common Issues</Text>
-              {[
-                { issue: "Flat Tyre", percent: 35 },
-                { issue: "Dead Battery", percent: 25 },
-                { issue: "Engine Issue", percent: 20 },
-                { issue: "Overheating", percent: 12 },
-                { issue: "Other", percent: 8 },
-              ].map((item, index) => (
-                <View key={index} style={styles.issueRow}>
-                  <Text style={styles.issueName}>{item.issue}</Text>
-                  <View style={styles.issueBarContainer}>
-                    <View
-                      style={[styles.issueBar, { width: `${item.percent}%` }]}
-                    />
-                  </View>
-                  <Text style={styles.issuePercent}>{item.percent}%</Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Peak Hours */}
-            <View style={styles.analyticsCard}>
-              <Text style={styles.analyticsTitle}>🕐 Peak Usage Hours</Text>
-              <Text style={styles.analyticsValue}>7 PM – 11 PM</Text>
-              <Text style={styles.analyticsNote}>
-                Most breakdowns reported in evening hours
-              </Text>
-            </View>
+            <Text style={styles.emptyText}>
+              Analytics will appear here once platform activity is recorded.
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -465,6 +372,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#1F2937",
     marginBottom: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    paddingVertical: 24,
   },
   requestCard: {
     backgroundColor: "#fff",

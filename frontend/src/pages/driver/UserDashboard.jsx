@@ -84,7 +84,12 @@ function DashboardContent({ navigation }) {
 
         <SectionTitle>Recent Requests</SectionTitle>
         <View style={styles.requestsList}>
-          {requests.map((request) => (
+          {requests.length === 0 ? (
+            <Card style={styles.requestCard}>
+              <Text style={styles.emptyRequests}>No requests yet.</Text>
+            </Card>
+          ) : (
+            requests.map((request) => (
             <TouchableOpacity
               key={request.id}
               activeOpacity={
@@ -117,7 +122,8 @@ function DashboardContent({ navigation }) {
                 <StatusBadge status={request.status} />
               </Card>
             </TouchableOpacity>
-          ))}
+          ))
+          )}
         </View>
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -219,5 +225,11 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginTop: 6,
     fontWeight: "600",
+  },
+  emptyRequests: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+    paddingVertical: 8,
   },
 });

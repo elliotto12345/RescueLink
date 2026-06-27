@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,62 +7,232 @@ import {
   SafeAreaView,
   StatusBar,
   ScrollView,
+  RefreshControl,
+  Alert,
 } from "react-native";
-import { connectSocket } from "../../services/socket";
+import { useFocusEffect } from "@react-navigation/native";
+import * as Location from "expo-location";
+import { connectSocket, sendLocation, emitAcceptRequest, emitDeclineRequest, getSocket } from "../../services/socket";
+import { updateMechanicLocation } from "../../services/mechanicPresence";
+import {
+  fetchPendingServiceRequestsForMechanic,
+  mapRequestToJob,
+  updateServiceRequestStatus,
+} from "../../services/requestService";
+import { REQUEST_STATUS } from "../../constants/requestStatus";
 import { getUser } from "../../services/storage";
 import BottomNav from "../../components/layout/BottomNav";
 import { PROVIDER_NAV } from "../../constants/navigation";
-
-const completedJobs = [
-  {
-    id: 1,
-    user: "Kofi Boateng",
-    issue: "Engine Overheating",
-    date: "May 28, 2025",
-    earned: "GHS 150",
-  },
-  {
-    id: 2,
-    user: "Abena Asante",
-    issue: "Fuel Empty",
-    date: "May 25, 2025",
-    earned: "GHS 80",
-  },
-];
+import { ROLES } from "../../constants/roles";
 
 export default function MechanicDashboard({ navigation }) {
   const [activeTab, setActiveTab] = useState("requests");
   const [liveRequests, setLiveRequests] = useState([]);
+  const [completedJobs, setCompletedJobs] = useState([]);
+  const [userName, setUserName] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    initSocket();
-  }, []);
+  const shareMechanicLocation = async (user) => {
+    if (!user?.id) return;
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const { latitude, longitude } = position.coords;
+      await updateMechanicLocation(user.id, latitude, longitude);
+
+      sendLocation({
+        type: "mechanic",
+        mechanicId: user.id,
+        latitude,
+        longitude,
+      });
+    } catch (error) {
+      console.error("Could not share mechanic location:", error);
+    }
+  };
+
+  const loadAvailableJobs = async (mechanicId) => {
+    if (!mechanicId) return;
+    const pending = await fetchPendingServiceRequestsForMechanic(mechanicId);
+    setLiveRequests(pending.map(mapRequestToJob));
+  };
+
+  const handleAcceptRequest = async (request) => {
+    const user = await getUser();
+    if (!user?.id || !request?.id) return;
+
+    try {
+      await updateServiceRequestStatus(request.id, REQUEST_STATUS.ACCEPTED, {
+        acceptedAt: new Date().toISOString(),
+      });
+
+      const socket = getSocket() || connectSocket(user.id, user.role || ROLES.PROVIDER);
+      emitAcceptRequest({
+        requestId: request.id,
+        id: request.id,
+        userId: request.userId,
+        mechanicId: user.id,
+        mechanicName: user.name,
+      });
+
+      setLiveRequests((prev) => prev.filter((r) => r.id !== request.id));
+
+      navigation.navigate("JobScreen", {
+        request: { ...request, status: REQUEST_STATUS.ACCEPTED },
+      });
+    } catch (error) {
+      Alert.alert("Error", "Could not accept this request. Please try again.");
+    }
+  };
+
+  const handleDeclineRequest = async (request) => {
+    const user = await getUser();
+    if (!user?.id || !request?.id) return;
+
+    Alert.alert(
+      "Decline Request",
+      `Decline the request from ${request.user || "this driver"}?`,
+      [
+        { text: "Keep Request", style: "cancel" },
+        {
+          text: "Decline",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await updateServiceRequestStatus(request.id, REQUEST_STATUS.DECLINED, {
+                declinedAt: new Date().toISOString(),
+              });
+
+              const socket =
+                getSocket() || connectSocket(user.id, user.role || ROLES.PROVIDER);
+              emitDeclineRequest({
+                requestId: request.id,
+                id: request.id,
+                userId: request.userId,
+                mechanicId: user.id,
+                mechanicName: user.name,
+              });
+
+              setLiveRequests((prev) => prev.filter((r) => r.id !== request.id));
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                "Could not decline this request. Please try again.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const initSocket = async () => {
     const user = await getUser();
-    const socket = connectSocket(user?.id);
+    if (!user?.id) return;
+
+    setUserName(user?.name?.split(" ")[0] || "there");
+
+    const socket = connectSocket(user.id, user.role || ROLES.PROVIDER);
+    await shareMechanicLocation(user);
+    await loadAvailableJobs(user.id);
+
+    socket.off("incomingRequest");
+    socket.off("requestCancelled");
 
     socket.on("incomingRequest", (data) => {
+      if (data?.mechanicId && data.mechanicId !== user.id) return;
+      if (!data?.userId && !data?.user) return;
+
       setLiveRequests((prev) => {
         const exists = prev.find((r) => r.id === data.id);
         if (exists) return prev;
-        return [data, ...prev];
+        return [mapRequestToJob(data), ...prev];
       });
+
+      Alert.alert(
+        "New Service Request",
+        `${data.user || "A driver"} needs help with ${data.issue || "a service"}.`,
+      );
     });
+
+    socket.on("requestCancelled", (data) => {
+      const cancelledId = data.requestId || data.id;
+      if (!cancelledId) return;
+
+      setLiveRequests((prev) => prev.filter((r) => r.id !== cancelledId));
+      Alert.alert(
+        "Request Cancelled",
+        `${data.userName || "The driver"} cancelled their service request.`,
+      );
+    });
+  };
+
+  useEffect(() => {
+    initSocket();
+
+    const locationInterval = setInterval(async () => {
+      const user = await getUser();
+      if (user) {
+        await shareMechanicLocation(user);
+      }
+    }, 60000);
+
+    return () => {
+      clearInterval(locationInterval);
+    };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      getUser().then((user) => {
+        if (user) {
+          shareMechanicLocation(user);
+          connectSocket(user.id, user.role || ROLES.PROVIDER);
+          loadAvailableJobs(user.id);
+        }
+      });
+    }, []),
+  );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const user = await getUser();
+      if (user) {
+        await shareMechanicLocation(user);
+        connectSocket(user.id, user.role || ROLES.PROVIDER);
+        await loadAvailableJobs(user.id);
+      }
+    } catch (error) {
+      console.error("Could not refresh available jobs:", error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Hey, Kwame 👋</Text>
+            <Text style={styles.greeting}>Hey, {userName} 👋</Text>
             <Text style={styles.subGreeting}>
               {liveRequests.length > 0
-                ? `You have ${liveRequests.length} new requests`
-                : "No new requests yet"}
+                ? `You have ${liveRequests.length} available job${liveRequests.length === 1 ? "" : "s"}`
+                : "No available jobs yet"}
             </Text>
           </View>
           <View style={styles.statusBadge}>
@@ -74,15 +244,15 @@ export default function MechanicDashboard({ navigation }) {
         {/* Stats Row */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>24</Text>
+            <Text style={styles.statNumber}>0</Text>
             <Text style={styles.statLabel}>Total Jobs</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>4.8⭐</Text>
+            <Text style={styles.statNumber}>—</Text>
             <Text style={styles.statLabel}>Rating</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>GHS 1,200</Text>
+            <Text style={styles.statNumber}>GHS 0</Text>
             <Text style={styles.statLabel}>This Month</Text>
           </View>
         </View>
@@ -99,7 +269,7 @@ export default function MechanicDashboard({ navigation }) {
                 activeTab === "requests" && styles.tabTextActive,
               ]}
             >
-              Incoming Requests
+              Available Jobs
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -117,15 +287,15 @@ export default function MechanicDashboard({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Incoming Requests */}
+        {/* Available Jobs */}
         {activeTab === "requests" && (
           <View style={styles.section}>
             {liveRequests.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyEmoji}>🔍</Text>
-                <Text style={styles.emptyTitle}>No Requests Yet</Text>
+                <Text style={styles.emptyTitle}>No Available Jobs</Text>
                 <Text style={styles.emptySubtitle}>
-                  New requests will appear here instantly
+                  Pull down to refresh for new jobs
                 </Text>
               </View>
             ) : (
@@ -152,27 +322,28 @@ export default function MechanicDashboard({ navigation }) {
                     <Text style={styles.requestLocation}>
                       📍 {request.address || "Location shared"}
                     </Text>
-                    <Text style={styles.requestDistance}>
-                      🗺️ Calculating distance...
-                    </Text>
+                    {request.phone ? (
+                      <Text style={styles.requestLocation}>
+                        📞 {request.phone}
+                      </Text>
+                    ) : null}
+                    {request.description ? (
+                      <Text style={styles.requestDistance}>
+                        📝 {request.description}
+                      </Text>
+                    ) : null}
                   </View>
 
                   <View style={styles.requestActions}>
                     <TouchableOpacity
                       style={styles.acceptButton}
-                      onPress={() =>
-                        navigation.navigate("JobScreen", { request })
-                      }
+                      onPress={() => handleAcceptRequest(request)}
                     >
                       <Text style={styles.acceptButtonText}>✅ Accept</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.rejectButton}
-                      onPress={() =>
-                        setLiveRequests((prev) =>
-                          prev.filter((r) => r.id !== request.id),
-                        )
-                      }
+                      onPress={() => handleDeclineRequest(request)}
                     >
                       <Text style={styles.rejectButtonText}>❌ Decline</Text>
                     </TouchableOpacity>
@@ -186,7 +357,16 @@ export default function MechanicDashboard({ navigation }) {
         {/* Completed Jobs */}
         {activeTab === "completed" && (
           <View style={styles.section}>
-            {completedJobs.map((job) => (
+            {completedJobs.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>📋</Text>
+                <Text style={styles.emptyTitle}>No Completed Jobs</Text>
+                <Text style={styles.emptySubtitle}>
+                  Completed jobs will appear here
+                </Text>
+              </View>
+            ) : (
+              completedJobs.map((job) => (
               <View key={job.id} style={styles.completedCard}>
                 <View style={styles.completedLeft}>
                   <Text style={styles.completedUser}>{job.user}</Text>
@@ -197,7 +377,8 @@ export default function MechanicDashboard({ navigation }) {
                   <Text style={styles.earnedText}>{job.earned}</Text>
                 </View>
               </View>
-            ))}
+            ))
+            )}
           </View>
         )}
       </ScrollView>

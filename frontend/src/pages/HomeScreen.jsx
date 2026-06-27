@@ -10,12 +10,37 @@ import {
 } from "react-native";
 import Button from "../components/common/Button";
 import Card from "../components/common/Card";
-import {
-  LANDING_FEATURES,
-  HOW_IT_WORKS,
-  TESTIMONIALS,
-} from "../data/sampleData";
 import { colors, radius, spacing } from "../constants/theme";
+
+const LANDING_FEATURES = [
+  {
+    emoji: "🚨",
+    title: "Instant SOS",
+    description: "One tap connects you to verified roadside help nearby.",
+  },
+  {
+    emoji: "🤖",
+    title: "AI Diagnosis",
+    description: "Describe symptoms and get smart service recommendations.",
+  },
+  {
+    emoji: "📍",
+    title: "Live Tracking",
+    description: "Track your provider in real time with ETA updates.",
+  },
+  {
+    emoji: "💬",
+    title: "Direct Chat",
+    description: "Message your provider and stay informed every step.",
+  },
+];
+
+const HOW_IT_WORKS = [
+  { step: 1, title: "Request Help", description: "Tap SOS and share your location." },
+  { step: 2, title: "Get Matched", description: "AI matches you with the best provider." },
+  { step: 3, title: "Track & Chat", description: "Follow live updates and communicate." },
+  { step: 4, title: "Pay & Rate", description: "Secure payment and leave a review." },
+];
 
 export default function HomeScreen({ navigation }) {
   return (
@@ -104,18 +129,6 @@ export default function HomeScreen({ navigation }) {
             recommended service type, and confidence scores.
           </Text>
         </Card>
-
-        {/* Testimonials */}
-        <Text style={styles.sectionTitle}>What Users Say</Text>
-        {TESTIMONIALS.map((t) => (
-          <Card key={t.name} style={styles.testimonial}>
-            <Text style={styles.testimonialStars}>{"⭐".repeat(t.rating)}</Text>
-            <Text style={styles.testimonialText}>"{t.text}"</Text>
-            <Text style={styles.testimonialName}>
-              — {t.name}, {t.role}
-            </Text>
-          </Card>
-        ))}
 
         {/* Contact */}
         <Card style={styles.contact}>

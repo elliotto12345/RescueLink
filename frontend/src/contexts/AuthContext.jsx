@@ -1,8 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { AppState } from "react-native";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { fetchUserProfile } from "../services/authService";
+import {
+  markMechanicOnline,
+  markMechanicOffline,
+} from "../services/mechanicPresence";
 import { saveUser, getUser, clearSession } from "../services/storage";
+import { ROLES } from "../constants/roles";
 
 const AuthContext = createContext(null);
 
@@ -28,12 +34,44 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    if (!user?.id || user.role !== ROLES.PROVIDER) {
+      return;
+    }
+
+    const userId = user.id;
+    markMechanicOnline(userId);
+
+    const heartbeat = setInterval(() => {
+      markMechanicOnline(userId);
+    }, 60000);
+
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "background" || state === "inactive") {
+        markMechanicOffline(userId);
+      } else if (state === "active") {
+        markMechanicOnline(userId);
+      }
+    });
+
+    return () => {
+      clearInterval(heartbeat);
+      appStateSub.remove();
+    };
+  }, [user?.id, user?.role]);
+
   const signIn = async (profile) => {
     setUser(profile);
     await saveUser(profile, profile.id);
+    if (profile.role === ROLES.PROVIDER) {
+      await markMechanicOnline(profile.id);
+    }
   };
 
   const signOut = async () => {
+    if (user?.role === ROLES.PROVIDER && user?.id) {
+      await markMechanicOffline(user.id);
+    }
     setUser(null);
     await clearSession();
   };

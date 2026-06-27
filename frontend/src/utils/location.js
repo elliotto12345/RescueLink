@@ -28,3 +28,26 @@ export function sortMechanicsByDistance(mechanics, userLat, userLon) {
     }))
     .sort((a, b) => a.distanceKm - b.distanceKm);
 }
+
+/** Online mechanics first (by distance), then offline (by distance). */
+export function sortMechanicsByOnlineAndDistance(mechanics, userLat, userLon) {
+  const withCoords = mechanics.filter(
+    (m) => m.latitude != null && m.longitude != null,
+  );
+  const withoutCoords = mechanics.filter(
+    (m) => m.latitude == null || m.longitude == null,
+  );
+
+  const withDistance = sortMechanicsByDistance(withCoords, userLat, userLon);
+  const onlineWithDistance = withDistance.filter((m) => m.online);
+  const offlineWithDistance = withDistance.filter((m) => !m.online);
+  const onlineNoCoords = withoutCoords.filter((m) => m.online);
+  const offlineNoCoords = withoutCoords.filter((m) => !m.online);
+
+  return [
+    ...onlineWithDistance,
+    ...offlineWithDistance,
+    ...onlineNoCoords,
+    ...offlineNoCoords,
+  ];
+}

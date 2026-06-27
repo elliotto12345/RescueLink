@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { RECENT_REQUESTS } from "../data/sampleData";
 
 const STORAGE_KEY = "serviceHistory";
 
@@ -8,8 +7,7 @@ export async function getServiceHistory() {
   if (stored) {
     return JSON.parse(stored);
   }
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(RECENT_REQUESTS));
-  return RECENT_REQUESTS;
+  return [];
 }
 
 export async function addServiceHistory(entry) {

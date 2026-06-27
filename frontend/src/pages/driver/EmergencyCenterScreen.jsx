@@ -15,7 +15,7 @@ import ScreenHeader from "../../components/layout/ScreenHeader";
 import BottomNav from "../../components/layout/BottomNav";
 import Card from "../../components/common/Card";
 import SectionTitle from "../../components/layout/SectionTitle";
-import { EMERGENCY_CONTACTS } from "../../data/sampleData";
+import { EMERGENCY_CONTACTS } from "../../constants/emergencyContacts";
 import { DRIVER_NAV } from "../../constants/navigation";
 import { colors, radius, shadow } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
@@ -90,16 +90,6 @@ function EmergencyCenterContent({ navigation }) {
             </Card>
           ))}
         </View>
-
-        <SectionTitle>Hazard Alerts</SectionTitle>
-        <Card style={styles.alertCard}>
-          <Text style={styles.alertEmoji}>⚠️</Text>
-          <Text style={styles.alertTitle}>Heavy Rain Advisory</Text>
-          <Text style={styles.alertText}>
-            Drive carefully on major highways. Reduced visibility expected until
-            10 PM.
-          </Text>
-        </Card>
 
         <View style={{ height: 100 }} />
       </ScrollView>

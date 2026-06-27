@@ -4,10 +4,10 @@ const SOCKET_URL = "https://rescuelink-production-cb78.up.railway.app";
 
 let socket = null;
 
-export const connectSocket = (userId) => {
+export const connectSocket = (userId, role = "user") => {
   socket = io(SOCKET_URL, {
     transports: ["websocket"],
-    query: { userId },
+    query: { userId, role },
   });
 
   socket.on("connect", () => {
@@ -40,4 +40,20 @@ export const sendMessage = (data) => {
 
 export const updateStatus = (data) => {
   if (socket) socket.emit("updateStatus", data);
+};
+
+export const emitNewRequest = (data) => {
+  if (socket) socket.emit("newRequest", data);
+};
+
+export const emitAcceptRequest = (data) => {
+  if (socket) socket.emit("acceptRequest", data);
+};
+
+export const emitDeclineRequest = (data) => {
+  if (socket) socket.emit("declineRequest", data);
+};
+
+export const emitCancelRequest = (data) => {
+  if (socket) socket.emit("cancelRequest", data);
 };

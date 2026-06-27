@@ -13,58 +13,21 @@ import {
 } from "react-native";
 import { connectSocket, sendMessage } from "../../services/socket";
 import { getUser } from "../../services/storage";
-import { NEARBY_MECHANICS } from "../../data/sampleData";
-
-const CHAT_THREADS = {
-  m1: [
-    {
-      id: 1,
-      sender: "mechanic",
-      message:
-        "Hello! I have accepted your request. I am on my way to your location.",
-      time: "10:46 AM",
-    },
-    {
-      id: 2,
-      sender: "user",
-      message: "Thank you! I am at the Total filling station on the main road.",
-      time: "10:47 AM",
-    },
-    {
-      id: 3,
-      sender: "mechanic",
-      message:
-        "Perfect, I can see your location. I will be there in about 8 minutes.",
-      time: "10:47 AM",
-    },
-  ],
-  m2: [
-    {
-      id: 1,
-      sender: "mechanic",
-      message: "Hi! Thanks for reaching out. How can I help today?",
-      time: "9:15 AM",
-    },
-  ],
-  m3: [
-    {
-      id: 1,
-      sender: "mechanic",
-      message: "Can you share a photo of the dashboard warning?",
-      time: "Mon",
-    },
-  ],
-  m4: [
-    {
-      id: 1,
-      sender: "mechanic",
-      message: "Job completed. Drive safe!",
-      time: "May 28",
-    },
-  ],
-};
+import { getMechanics } from "../../services/api";
 
 function MechanicChatList({ navigation, onSelectMechanic }) {
+  const [mechanics, setMechanics] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getMechanics()
+      .then((response) => {
+        const list = response.data?.mechanics || response.data || [];
+        setMechanics(Array.isArray(list) ? list : []);
+      })
+      .catch(() => setMechanics([]))
+      .finally(() => setLoading(false));
+  }, []);
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -81,7 +44,14 @@ function MechanicChatList({ navigation, onSelectMechanic }) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {NEARBY_MECHANICS.map((mechanic) => (
+        {loading ? (
+          <Text style={styles.emptyListText}>Loading conversations...</Text>
+        ) : mechanics.length === 0 ? (
+          <Text style={styles.emptyListText}>
+            No conversations yet. Request help to connect with a mechanic.
+          </Text>
+        ) : (
+          mechanics.map((mechanic) => (
           <TouchableOpacity
             key={mechanic.id}
             style={styles.listItem}
@@ -97,13 +67,15 @@ function MechanicChatList({ navigation, onSelectMechanic }) {
                 <Text style={styles.listItemName} numberOfLines={1}>
                   {mechanic.name}
                 </Text>
-                <Text style={styles.listItemTime}>{mechanic.lastMessageTime}</Text>
+                <Text style={styles.listItemTime}>
+                  {mechanic.lastMessageTime || ""}
+                </Text>
               </View>
               <View style={styles.listItemBottom}>
                 <Text style={styles.listItemPreview} numberOfLines={1}>
-                  {mechanic.lastMessage}
+                  {mechanic.lastMessage || "No messages yet"}
                 </Text>
-                {mechanic.unread > 0 && (
+                {(mechanic.unread ?? 0) > 0 && (
                   <View style={styles.unreadBadge}>
                     <Text style={styles.unreadText}>{mechanic.unread}</Text>
                   </View>
@@ -114,7 +86,8 @@ function MechanicChatList({ navigation, onSelectMechanic }) {
               </Text>
             </View>
           </TouchableOpacity>
-        ))}
+          ))
+        )}
         <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
@@ -122,9 +95,7 @@ function MechanicChatList({ navigation, onSelectMechanic }) {
 }
 
 function MechanicChatThread({ mechanic, onBack }) {
-  const [messages, setMessages] = useState(
-    CHAT_THREADS[mechanic.id] || [],
-  );
+  const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const scrollViewRef = useRef();
 
@@ -358,6 +329,13 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginTop: 4,
     flexWrap: "wrap",
+  },
+  emptyListText: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 48,
   },
   listItem: {
     flexDirection: "row",

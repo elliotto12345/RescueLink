@@ -15,19 +15,18 @@ import Button from "../../components/common/Button";
 import StarRating from "../../components/common/StarRating";
 import Input from "../../components/common/Input";
 import SectionTitle from "../../components/layout/SectionTitle";
-import { PROVIDER_REVIEWS } from "../../data/sampleData";
 import { markServiceRated } from "../../services/serviceHistory";
 import { colors } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
 
 function RatingsContent({ navigation, route }) {
-  const providerName = route?.params?.providerName || "Kwame Mensah";
+  const providerName = route?.params?.providerName || "Provider";
   const fromServiceFlow = route?.params?.fromServiceFlow;
   const requestId = route?.params?.requestId;
   const serviceType =
     route?.params?.service && route?.params?.date
       ? `${route.params.service} · ${route.params.date}`
-      : "Flat Tyre Repair · June 1, 2025";
+      : "";
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
 
@@ -104,18 +103,9 @@ function RatingsContent({ navigation, route }) {
 
         <SectionTitle>Provider Reviews</SectionTitle>
         <View style={styles.reviews}>
-          {PROVIDER_REVIEWS.map((review) => (
-            <Card key={review.id} style={styles.reviewItem}>
-              <View style={styles.reviewHeader}>
-              <Text style={styles.reviewUser} numberOfLines={1}>
-                {review.user}
-              </Text>
-                <StarRating rating={review.rating} readonly size={16} />
-              </View>
-              <Text style={styles.reviewComment}>{review.comment}</Text>
-              <Text style={styles.reviewDate}>{review.date}</Text>
-            </Card>
-          ))}
+          <Card style={styles.reviewItem}>
+            <Text style={styles.emptyReviews}>No reviews yet.</Text>
+          </Card>
         </View>
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -148,4 +138,10 @@ const styles = StyleSheet.create({
   reviewUser: { fontSize: 15, fontWeight: "bold", color: colors.text, flexShrink: 1 },
   reviewComment: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, flexWrap: "wrap" },
   reviewDate: { fontSize: 12, color: colors.textMuted, marginTop: 8 },
+  emptyReviews: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+    paddingVertical: 8,
+  },
 });

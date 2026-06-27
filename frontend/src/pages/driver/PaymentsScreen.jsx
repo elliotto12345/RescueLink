@@ -13,17 +13,15 @@ import ProtectedScreen from "../../navigation/ProtectedScreen";
 import ScreenHeader from "../../components/layout/ScreenHeader";
 import Card, { CardTitle, CardSubtitle } from "../../components/common/Card";
 import Button from "../../components/common/Button";
-import StatusBadge from "../../components/common/StatusBadge";
 import SectionTitle from "../../components/layout/SectionTitle";
-import { PAYMENT_HISTORY } from "../../data/sampleData";
 import { addServiceHistory } from "../../services/serviceHistory";
 import { colors, radius } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
 
 const CURRENT_SERVICE = {
-  service: "Flat Tyre Repair",
-  provider: "Kwame Mensah",
-  amount: 80,
+  service: "",
+  provider: "",
+  amount: 0,
   currency: "GHS",
 };
 
@@ -123,22 +121,9 @@ function PaymentsContent({ navigation, route }) {
 
         <SectionTitle>Payment History</SectionTitle>
         <View style={styles.history}>
-          {PAYMENT_HISTORY.map((payment) => (
-            <Card key={payment.id} style={styles.historyItem}>
-              <View style={styles.historyRow}>
-                <View style={styles.historyLeft}>
-                  <Text style={styles.historyService}>{payment.service}</Text>
-                  <Text style={styles.historyMeta}>
-                    {payment.method} · {payment.date}
-                  </Text>
-                </View>
-                <View style={styles.historyRight}>
-                  <Text style={styles.historyAmount}>GHS {payment.amount}</Text>
-                  <StatusBadge status={payment.status} />
-                </View>
-              </View>
-            </Card>
-          ))}
+          <Card style={styles.historyItem}>
+            <Text style={styles.emptyHistory}>No payment history yet.</Text>
+          </Card>
         </View>
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -203,4 +188,10 @@ const styles = StyleSheet.create({
   historyMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   historyRight: { alignItems: "flex-end", gap: 6 },
   historyAmount: { fontSize: 16, fontWeight: "bold", color: colors.text },
+  emptyHistory: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+    paddingVertical: 8,
+  },
 });

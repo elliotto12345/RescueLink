@@ -10,17 +10,19 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
 import * as Location from "expo-location";
-import { createRequest, getNearbyMechanics } from "../../services/api";
 import { getUser } from "../../services/storage";
-import { connectSocket } from "../../services/socket";
-import { NEARBY_MECHANICS } from "../../data/sampleData";
+import { connectSocket, emitNewRequest } from "../../services/socket";
+import { createServiceRequest } from "../../services/requestService";
+import { fetchNearbyMechanicsWithStatus } from "../../services/mechanicService";
 import {
   formatDistance,
-  sortMechanicsByDistance,
+  sortMechanicsByOnlineAndDistance,
 } from "../../utils/location";
 import { ISSUE_TYPES } from "../../constants/issueTypes";
+import { ROLES } from "../../constants/roles";
 
 export default function RequestHelpScreen({ navigation }) {
   const [selectedIssue, setSelectedIssue] = useState(null);
@@ -32,6 +34,29 @@ export default function RequestHelpScreen({ navigation }) {
   const [loadingMechanics, setLoadingMechanics] = useState(false);
   const [mechanics, setMechanics] = useState([]);
   const [selectedMechanic, setSelectedMechanic] = useState(null);
+  const [refreshingMechanics, setRefreshingMechanics] = useState(false);
+
+  const fetchAndSortMechanics = async () => {
+    const registered = await fetchNearbyMechanicsWithStatus();
+    return sortMechanicsByOnlineAndDistance(
+      registered,
+      location.lat,
+      location.lon,
+    );
+  };
+
+  const applyMechanicsList = (sorted) => {
+    setMechanics(sorted);
+
+    if (!selectedMechanic) return;
+
+    const updated = sorted.find((m) => m.id === selectedMechanic.id);
+    if (!updated || !updated.online) {
+      setSelectedMechanic(null);
+    } else {
+      setSelectedMechanic(updated);
+    }
+  };
 
   const handleGetLocation = async () => {
     setLocating(true);
@@ -84,35 +109,27 @@ export default function RequestHelpScreen({ navigation }) {
 
     setLoadingMechanics(true);
     try {
-      let nearby = [];
-      try {
-        const response = await getNearbyMechanics(location.lat, location.lon);
-        nearby = response.data?.mechanics || response.data || [];
-      } catch {
-        nearby = NEARBY_MECHANICS;
-      }
-
-      if (!nearby.length) {
-        nearby = NEARBY_MECHANICS;
-      }
-
-      const normalized = nearby.map((m) => ({
-        ...m,
-        latitude: m.latitude ?? m.lat,
-        longitude: m.longitude ?? m.lon ?? m.lng,
-      }));
-
-      const withDistance = sortMechanicsByDistance(
-        normalized,
-        location.lat,
-        location.lon,
-      );
-      setMechanics(withDistance);
+      const sorted = await fetchAndSortMechanics();
+      applyMechanicsList(sorted);
       setStep("pickMechanic");
     } catch (error) {
-      Alert.alert("Error", "Could not load nearby mechanics. Please try again.");
+      Alert.alert("Error", "Could not load mechanics. Please try again.");
     } finally {
       setLoadingMechanics(false);
+    }
+  };
+
+  const refreshMechanicsList = async () => {
+    if (!location) return;
+
+    setRefreshingMechanics(true);
+    try {
+      const sorted = await fetchAndSortMechanics();
+      applyMechanicsList(sorted);
+    } catch (error) {
+      Alert.alert("Error", "Could not refresh mechanics. Please try again.");
+    } finally {
+      setRefreshingMechanics(false);
     }
   };
 
@@ -121,25 +138,35 @@ export default function RequestHelpScreen({ navigation }) {
       Alert.alert("Error", "Please select a mechanic to continue");
       return;
     }
+    if (!selectedMechanic.online) {
+      Alert.alert("Error", "Please select an online mechanic to continue");
+      return;
+    }
 
     setSubmitting(true);
     try {
       const user = await getUser();
       const issueLabel = ISSUE_TYPES.find((i) => i.id === selectedIssue)?.label;
 
-      const response = await createRequest({
+      const serviceRequest = await createServiceRequest({
         userId: user.id,
+        userName: user.name,
+        userPhone: user.phone,
         issue: issueLabel,
         latitude: location.lat,
         longitude: location.lon,
+        address: location.address,
         description,
         mechanicId: selectedMechanic.id,
+        mechanicName: selectedMechanic.name,
       });
 
-      const socket = connectSocket(user?.id);
-      socket.emit("newRequest", {
-        id: response.data.request.id,
+      connectSocket(user?.id, user?.role || ROLES.DRIVER);
+      emitNewRequest({
+        id: serviceRequest.id,
+        userId: user.id,
         user: user.name,
+        userPhone: user.phone,
         issue: issueLabel,
         address: location.address,
         latitude: location.lat,
@@ -152,6 +179,8 @@ export default function RequestHelpScreen({ navigation }) {
       navigation.navigate("TrackMechanic", {
         mechanic: selectedMechanic,
         service: issueLabel,
+        requestId: serviceRequest.id,
+        waitingForAcceptance: true,
       });
     } catch (error) {
       Alert.alert("Error", "Could not submit request. Please try again.");
@@ -164,7 +193,15 @@ export default function RequestHelpScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" />
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshingMechanics}
+              onRefresh={refreshMechanicsList}
+            />
+          }
+        >
           <View style={styles.header}>
             <TouchableOpacity
               onPress={() => {
@@ -181,59 +218,96 @@ export default function RequestHelpScreen({ navigation }) {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📍 Nearby Mechanics</Text>
+            <Text style={styles.sectionTitle}>📍 Registered Mechanics</Text>
             <Text style={styles.sectionHint}>
-              Sorted by distance from your location. Tap to select who should
-              handle your request.
+              Mechanics appear online when logged in with the app open.
+              Only online mechanics can be selected. Pull down to refresh.
             </Text>
 
-            {mechanics.map((mechanic) => {
-              const isSelected = selectedMechanic?.id === mechanic.id;
-              const isBusy = mechanic.status === "busy";
+            {mechanics.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>🔍</Text>
+                <Text style={styles.emptyTitle}>No mechanic available</Text>
+                <Text style={styles.emptySubtitle}>
+                  There are no registered mechanics yet. Pull down to refresh.
+                </Text>
+              </View>
+            ) : (
+              mechanics.map((mechanic, index) => {
+                const isSelected = selectedMechanic?.id === mechanic.id;
+                const isOnline = mechanic.online;
+                const showOnlineHeader =
+                  isOnline &&
+                  (index === 0 || !mechanics[index - 1]?.online);
+                const showOfflineHeader =
+                  !isOnline &&
+                  (index === 0 || mechanics[index - 1]?.online);
 
-              return (
-                <TouchableOpacity
-                  key={mechanic.id}
-                  style={[
-                    styles.mechanicCard,
-                    isSelected && styles.mechanicCardSelected,
-                    isBusy && styles.mechanicCardBusy,
-                  ]}
-                  onPress={() => !isBusy && setSelectedMechanic(mechanic)}
-                  disabled={isBusy}
-                >
-                  <View style={styles.mechanicAvatar}>
-                    <Text style={styles.mechanicAvatarText}>
-                      {mechanic.name.charAt(0)}
-                    </Text>
-                  </View>
-                  <View style={styles.mechanicInfo}>
-                    <Text style={styles.mechanicName} numberOfLines={1}>
-                      {mechanic.name}
-                    </Text>
-                    <Text style={styles.mechanicMeta} numberOfLines={1}>
-                      ⭐ {mechanic.rating} • {mechanic.jobs} jobs
-                    </Text>
-                    <Text style={styles.mechanicSpecialty} numberOfLines={2}>
-                      {mechanic.specialties?.join(" · ") || "General repair"}
-                    </Text>
-                  </View>
-                  <View style={styles.mechanicRight}>
-                    <Text style={styles.mechanicDistance}>
-                      {formatDistance(mechanic.distanceKm)}
-                    </Text>
-                    <Text
+                return (
+                  <View key={mechanic.id}>
+                    {showOnlineHeader && (
+                      <Text style={styles.groupLabel}>🟢 Online</Text>
+                    )}
+                    {showOfflineHeader && (
+                      <Text style={styles.groupLabel}>⚪ Offline</Text>
+                    )}
+                    <TouchableOpacity
                       style={[
-                        styles.mechanicStatus,
-                        isBusy && styles.mechanicStatusBusy,
+                        styles.mechanicCard,
+                        isSelected && styles.mechanicCardSelected,
+                        !isOnline && styles.mechanicCardOffline,
                       ]}
+                      onPress={() => isOnline && setSelectedMechanic(mechanic)}
+                      disabled={!isOnline}
                     >
-                      {isBusy ? "Busy" : isSelected ? "Selected ✓" : "Available"}
-                    </Text>
+                      <View style={styles.mechanicAvatar}>
+                        <Text style={styles.mechanicAvatarText}>
+                          {mechanic.name?.charAt(0) || "M"}
+                        </Text>
+                      </View>
+                      <View style={styles.mechanicInfo}>
+                        <Text style={styles.mechanicName} numberOfLines={1}>
+                          {mechanic.name}
+                        </Text>
+                        <Text style={styles.mechanicMeta} numberOfLines={1}>
+                          ⭐ {mechanic.rating ?? "—"} • {mechanic.jobs} jobs
+                        </Text>
+                        {mechanic.phone ? (
+                          <Text style={styles.mechanicSpecialty} numberOfLines={1}>
+                            📞 {mechanic.phone}
+                          </Text>
+                        ) : null}
+                        {mechanic.email ? (
+                          <Text style={styles.mechanicSpecialty} numberOfLines={1}>
+                            ✉️ {mechanic.email}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.mechanicRight}>
+                        <Text style={styles.mechanicDistance}>
+                          {mechanic.distanceKm != null
+                            ? formatDistance(mechanic.distanceKm)
+                            : "—"}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.mechanicStatus,
+                            !isOnline && styles.mechanicStatusOffline,
+                            isSelected && styles.mechanicStatusSelected,
+                          ]}
+                        >
+                          {isSelected
+                            ? "Selected ✓"
+                            : isOnline
+                              ? "Online"
+                              : "Offline"}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
-              );
-            })}
+                );
+              })
+            )}
           </View>
 
           <TouchableOpacity
@@ -411,6 +485,34 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 16,
   },
+  groupLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#374151",
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+  },
+  emptyEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 20,
+  },
   locationButton: {
     backgroundColor: "#2563EB",
     paddingVertical: 16,
@@ -535,8 +637,8 @@ const styles = StyleSheet.create({
     borderColor: "#2563EB",
     backgroundColor: "#EFF6FF",
   },
-  mechanicCardBusy: {
-    opacity: 0.55,
+  mechanicCardOffline: {
+    opacity: 0.6,
   },
   mechanicAvatar: {
     width: 48,
@@ -587,7 +689,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 4,
   },
-  mechanicStatusBusy: {
-    color: "#DC2626",
+  mechanicStatusOffline: {
+    color: "#9CA3AF",
+  },
+  mechanicStatusSelected: {
+    color: "#2563EB",
   },
 });

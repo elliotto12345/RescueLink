@@ -19,6 +19,15 @@ app.use(express.json());
 
 // Store connected users
 const connectedUsers = {};
+const onlineUsers = require("./state/onlineUsers");
+
+function notifyUser(userId, event, data) {
+  if (userId == null) return;
+  const socketId = connectedUsers[String(userId)];
+  if (socketId) {
+    io.to(socketId).emit(event, data);
+  }
+}
 
 // Test Route
 app.get("/", (req, res) => {
@@ -28,11 +37,12 @@ app.get("/", (req, res) => {
 // Socket.IO
 io.on("connection", (socket) => {
   const userId = socket.handshake.query.userId;
+  const role = socket.handshake.query.role || "user";
   console.log(`User ${userId} connected:`, socket.id);
 
-  // Store user socket
   if (userId) {
-    connectedUsers[userId] = socket.id;
+    connectedUsers[String(userId)] = socket.id;
+    onlineUsers.setOnline(userId, role);
   }
 
   // User shares location
@@ -41,15 +51,22 @@ io.on("connection", (socket) => {
     io.emit("receiveLocation", data);
   });
 
-  // Mechanic accepts request
+  // Mechanic accepts request — notify the driver only
   socket.on("acceptRequest", (data) => {
     console.log("Request accepted:", data);
-    // Notify the specific user
-    const userSocketId = connectedUsers[data.userId];
-    if (userSocketId) {
-      io.to(userSocketId).emit("requestAccepted", data);
-    }
-    io.emit("requestAccepted", data);
+    notifyUser(data.userId, "requestAccepted", data);
+  });
+
+  // Mechanic declines request — notify the driver only
+  socket.on("declineRequest", (data) => {
+    console.log("Request declined:", data);
+    notifyUser(data.userId, "requestDeclined", data);
+  });
+
+  // Driver cancels pending request — notify the assigned mechanic only
+  socket.on("cancelRequest", (data) => {
+    console.log("Request cancelled:", data);
+    notifyUser(data.mechanicId, "requestCancelled", data);
   });
 
   // Status update
@@ -64,17 +81,19 @@ io.on("connection", (socket) => {
     io.emit("receiveMessage", data);
   });
 
-  // New request created
+  // New request created — notify the assigned mechanic only
   socket.on("newRequest", (data) => {
     console.log("New request:", data);
-    // Broadcast to all mechanics
-    io.emit("incomingRequest", data);
+    if (data.mechanicId) {
+      notifyUser(data.mechanicId, "incomingRequest", data);
+    }
   });
 
   socket.on("disconnect", () => {
     console.log(`User ${userId} disconnected`);
     if (userId) {
-      delete connectedUsers[userId];
+      delete connectedUsers[String(userId)];
+      onlineUsers.setOffline(userId);
     }
   });
 });

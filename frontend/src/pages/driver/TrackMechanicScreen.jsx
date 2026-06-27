@@ -12,15 +12,23 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
-import { connectSocket, disconnectSocket } from "../../services/socket";
+import { connectSocket, disconnectSocket, emitCancelRequest } from "../../services/socket";
+import { updateServiceRequestStatus } from "../../services/requestService";
+import { REQUEST_STATUS } from "../../constants/requestStatus";
 import { getUser } from "../../services/storage";
-import { NEARBY_MECHANICS } from "../../data/sampleData";
+import { ROLES } from "../../constants/roles";
 
 export default function TrackMechanicScreen({ navigation, route }) {
   const selectedMechanic = route.params?.mechanic;
   const serviceType = route.params?.service || "Roadside Assistance";
-  const mechanic = selectedMechanic || NEARBY_MECHANICS[0];
-  const [status, setStatus] = useState(selectedMechanic ? "Found" : "Searching");
+  const requestId = route.params?.requestId;
+  const waitingForAcceptance = route.params?.waitingForAcceptance ?? false;
+  const mechanic = selectedMechanic;
+  const [status, setStatus] = useState(() => {
+    if (waitingForAcceptance) return "Pending";
+    if (selectedMechanic) return "Found";
+    return "Searching";
+  });
   const [userLocation, setUserLocation] = useState(null);
   const [mechanicLocation, setMechanicLocation] = useState(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -74,24 +82,46 @@ export default function TrackMechanicScreen({ navigation, route }) {
         longitude: mechanic?.longitude || location.coords.longitude + 0.01,
       });
     } catch (error) {
-      setUserLocation({
-        latitude: 5.6037,
-        longitude: -0.187,
-      });
-      setMechanicLocation({
-        latitude: 5.6137,
-        longitude: -0.177,
-      });
+      console.error("Could not get user location:", error);
     }
   };
 
   const initSocket = async () => {
     const user = await getUser();
-    const socket = connectSocket(user?.id);
+    const socket = connectSocket(user?.id, user?.role || ROLES.DRIVER);
+
+    socket.off("requestAccepted");
+    socket.off("requestDeclined");
 
     socket.on("requestAccepted", (data) => {
+      if (requestId && data.requestId && data.requestId !== requestId) return;
+      Alert.alert(
+        "Request Accepted",
+        `${data.mechanicName || mechanic?.name || "Your mechanic"} accepted your request and is on the way.`,
+      );
       setStatus("Found");
-      setTimeout(() => setStatus("OnTheWay"), 3000);
+      setTimeout(() => setStatus("OnTheWay"), 2000);
+    });
+
+    socket.on("requestDeclined", (data) => {
+      if (requestId && data.requestId && data.requestId !== requestId) return;
+      setStatus("Declined");
+      Alert.alert(
+        "Request Declined",
+        `${data.mechanicName || mechanic?.name || "The mechanic"} is unavailable right now. Please choose another mechanic.`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              disconnectSocket();
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "RequestHelp" }],
+              });
+            },
+          },
+        ],
+      );
     });
 
     socket.on("statusUpdated", (data) => {
@@ -106,12 +136,6 @@ export default function TrackMechanicScreen({ navigation, route }) {
         });
       }
     });
-
-    // Simulate for testing
-    if (!selectedMechanic) {
-      setTimeout(() => setStatus("Found"), 3000);
-    }
-    setTimeout(() => setStatus("OnTheWay"), selectedMechanic ? 3000 : 6000);
   };
 
   const handleConfirmMechanicArrived = () => {
@@ -140,8 +164,8 @@ export default function TrackMechanicScreen({ navigation, route }) {
             setStatus("Completed");
             navigation.navigate("Payments", {
               service: serviceType,
-              provider: mechanic.name,
-              amount: 80,
+              provider: mechanic?.name || "Provider",
+              amount: route.params?.amount ?? 0,
               currency: "GHS",
               fromServiceFlow: true,
             });
@@ -154,18 +178,41 @@ export default function TrackMechanicScreen({ navigation, route }) {
   const handleCancelRequest = () => {
     Alert.alert(
       "Cancel Request",
-      "Are you sure you want to cancel this service request?",
+      status === "Pending"
+        ? "Cancel this request while waiting for the mechanic to respond?"
+        : "Are you sure you want to cancel this service request?",
       [
         { text: "No", style: "cancel" },
         {
           text: "Yes, Cancel",
           style: "destructive",
-          onPress: () => {
-            disconnectSocket();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "UserDashboard" }],
-            });
+          onPress: async () => {
+            try {
+              const user = await getUser();
+              if (requestId) {
+                await updateServiceRequestStatus(
+                  requestId,
+                  REQUEST_STATUS.CANCELLED,
+                  { cancelledAt: new Date().toISOString() },
+                );
+                emitCancelRequest({
+                  requestId,
+                  id: requestId,
+                  userId: user?.id,
+                  userName: user?.name,
+                  mechanicId: mechanic?.id,
+                  mechanicName: mechanic?.name,
+                });
+              }
+            } catch (error) {
+              console.error("Could not cancel request:", error);
+            } finally {
+              disconnectSocket();
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "UserDashboard" }],
+              });
+            }
           },
         },
       ],
@@ -173,6 +220,22 @@ export default function TrackMechanicScreen({ navigation, route }) {
   };
 
   const getStatusInfo = () => {
+    if (status === "Pending")
+      return {
+        emoji: "⏳",
+        title: "Waiting for Mechanic",
+        subtitle: `${mechanic?.name || "Your mechanic"} has been notified. Please wait for them to accept.`,
+        color: "#D97706",
+        bg: "#FEF3C7",
+      };
+    if (status === "Declined")
+      return {
+        emoji: "❌",
+        title: "Request Declined",
+        subtitle: "The mechanic declined your request. You can choose another mechanic.",
+        color: "#DC2626",
+        bg: "#FEE2E2",
+      };
     if (status === "Searching")
       return {
         emoji: "🔍",
@@ -272,7 +335,7 @@ export default function TrackMechanicScreen({ navigation, route }) {
               {mechanicLocation && status !== "Searching" && (
                 <Marker
                   coordinate={mechanicLocation}
-                  title={mechanic.name}
+                  title={mechanic?.name || "Mechanic"}
                   description="Your mechanic"
                 >
                   <View style={styles.mechanicMarker}>
@@ -290,13 +353,13 @@ export default function TrackMechanicScreen({ navigation, route }) {
         </View>
 
         {/* Mechanic Card */}
-        {status !== "Searching" && (
+        {status !== "Searching" && mechanic && (
           <View style={styles.mechanicCard}>
             <Text style={styles.mechanicCardTitle}>Your Mechanic</Text>
             <View style={styles.mechanicInfo}>
               <View style={styles.mechanicAvatar}>
                 <Text style={styles.mechanicAvatarText}>
-                  {mechanic.name.charAt(0)}
+                  {mechanic.name?.charAt(0) || "M"}
                 </Text>
               </View>
               <View style={styles.mechanicDetails}>
@@ -304,16 +367,20 @@ export default function TrackMechanicScreen({ navigation, route }) {
                   {mechanic.name}
                 </Text>
                 <Text style={styles.mechanicRating} numberOfLines={1}>
-                  ⭐ {mechanic.rating} • {mechanic.jobs} jobs
+                  ⭐ {mechanic.rating ?? "—"} • {mechanic.jobs ?? 0} jobs
                 </Text>
-                <Text style={styles.mechanicPhone} numberOfLines={1}>
-                  📞 {mechanic.phone}
-                </Text>
+                {mechanic.phone ? (
+                  <Text style={styles.mechanicPhone} numberOfLines={1}>
+                    📞 {mechanic.phone}
+                  </Text>
+                ) : null}
               </View>
-              <View style={styles.etaContainer}>
-                <Text style={styles.etaTime}>8 min</Text>
-                <Text style={styles.etaLabel}>ETA</Text>
-              </View>
+              {route.params?.eta ? (
+                <View style={styles.etaContainer}>
+                  <Text style={styles.etaTime}>{route.params.eta}</Text>
+                  <Text style={styles.etaLabel}>ETA</Text>
+                </View>
+              ) : null}
             </View>
           </View>
         )}
@@ -340,14 +407,20 @@ export default function TrackMechanicScreen({ navigation, route }) {
                 styles.timelineDot,
                 {
                   backgroundColor:
-                    status !== "Searching" ? "#16A34A" : "#E5E7EB",
+                    status !== "Searching" && status !== "Pending"
+                      ? "#16A34A"
+                      : "#E5E7EB",
                 },
               ]}
             />
             <View style={styles.timelineContent}>
-              <Text style={styles.timelineEvent}>Mechanic Assigned</Text>
+              <Text style={styles.timelineEvent}>Mechanic Accepted</Text>
               <Text style={styles.timelineTime}>
-                {status !== "Searching" ? "Just now" : "Pending..."}
+                {status === "Pending"
+                  ? "Waiting..."
+                  : status === "Declined"
+                    ? "Declined"
+                    : "Accepted"}
               </Text>
             </View>
           </View>
@@ -408,7 +481,29 @@ export default function TrackMechanicScreen({ navigation, route }) {
         </View>
 
         {/* Action Buttons */}
-        {status !== "Searching" && status !== "Completed" && (
+        {status === "Pending" && (
+          <View style={styles.actions}>
+            <View style={styles.waitingCard}>
+              <Text style={styles.waitingTitle}>
+                Request sent to {mechanic?.name || "mechanic"}
+              </Text>
+              <Text style={styles.waitingSubtitle}>
+                You can cancel if they do not respond in time.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={handleCancelRequest}
+            >
+              <Text style={styles.cancelButtonText}>Cancel Request</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {status !== "Searching" &&
+          status !== "Pending" &&
+          status !== "Declined" &&
+          status !== "Completed" && (
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.chatButton}
@@ -711,5 +806,23 @@ const styles = StyleSheet.create({
     color: "#EF4444",
     fontSize: 16,
     fontWeight: "600",
+  },
+  waitingCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  waitingTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 6,
+  },
+  waitingSubtitle: {
+    fontSize: 13,
+    color: "#6B7280",
+    lineHeight: 18,
   },
 });

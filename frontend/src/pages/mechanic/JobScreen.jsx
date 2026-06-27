@@ -17,12 +17,7 @@ const statusSteps = [
 ];
 
 export default function JobScreen({ navigation, route }) {
-  const request = route?.params?.request || {
-    user: "John Mensah",
-    issue: "Flat Tyre",
-    location: "Accra Mall, Spintex Road",
-    distance: "1.2 km",
-  };
+  const request = route?.params?.request;
 
   const [currentStatus, setCurrentStatus] = useState("accepted");
 
@@ -48,6 +43,27 @@ export default function JobScreen({ navigation, route }) {
     return "#2563EB";
   };
 
+  if (!request) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Active Job</Text>
+          <View style={{ width: 50 }} />
+        </View>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>No active job</Text>
+          <Text style={styles.emptySubtitle}>
+            Accept a request from your dashboard to view job details.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -69,16 +85,20 @@ export default function JobScreen({ navigation, route }) {
           <View style={styles.userInfo}>
             <View style={styles.userAvatar}>
               <Text style={styles.userAvatarText}>
-                {request.user.charAt(0)}
+                {(request.user || "C").charAt(0)}
               </Text>
             </View>
             <View style={styles.userDetails}>
-              <Text style={styles.userName}>{request.user}</Text>
-              <Text style={styles.userIssue}>🔧 {request.issue}</Text>
-              <Text style={styles.userLocation}>📍 {request.location}</Text>
-              <Text style={styles.userDistance}>
-                🗺️ {request.distance} away
+              <Text style={styles.userName}>{request.user || "Customer"}</Text>
+              <Text style={styles.userIssue}>🔧 {request.issue || "Service request"}</Text>
+              <Text style={styles.userLocation}>
+                📍 {request.location || request.address || "Location shared"}
               </Text>
+              {request.distance ? (
+                <Text style={styles.userDistance}>
+                  🗺️ {request.distance} away
+                </Text>
+              ) : null}
             </View>
           </View>
 
@@ -462,5 +482,22 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 15,
     fontWeight: "bold",
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
   },
 });

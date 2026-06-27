@@ -10,9 +10,8 @@ frontend/src/
 │   ├── auth/            # RoleSelector
 │   ├── common/          # Button, Card, Input, StarRating, StatusBadge, LoadingSkeleton
 │   └── layout/          # ScreenHeader, BottomNav, SectionTitle
-├── constants/           # theme colors, roles, issue types, nav configs
+├── constants/           # theme colors, roles, issue types, nav configs, emergency contacts
 ├── contexts/            # AuthContext (global user session)
-├── data/                # sampleData.js — mock data until API/Firestore is wired
 ├── firebase/            # Firebase config
 ├── navigation/          # AppNavigator, ProtectedScreen
 ├── pages/               # All screens (flat — same level as your original files)
@@ -38,7 +37,8 @@ Edit `constants/theme.js` to change colors app-wide:
 - Login → email verification required → `AuthContext.signIn()`
 - Forgot password → `pages/ForgotPasswordScreen.jsx`
 
-## What Still Uses Mock Data
+## Data Sources
 
-- Recent requests, admin stats, payment history → `data/sampleData.js`
+- Driver service history → `services/serviceHistory.js` (AsyncStorage)
+- Mechanics, requests, payments → backend API via `services/api.js`
 - Backend requests API uses in-memory storage — connect Prisma when ready
