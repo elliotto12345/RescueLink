@@ -1,10 +1,11 @@
 import axios from "axios";
+import { getApiBaseUrl } from "../constants/apiConfig";
 
-const BASE_URL = "https://rescuelink-production-cb78.up.railway.app";
+const BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 15000,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -17,8 +18,27 @@ export const getNearbyMechanics = (lat, lon) =>
   api.get(`/api/mechanics/nearby?latitude=${lat}&longitude=${lon}`);
 export const getMechanics = () => api.get("/api/mechanics");
 
-export const sendOTP = (email) => api.post("/api/otp/send", { email });
-export const verifyOTP = (email, otp) =>
-  api.post("/api/otp/verify", { email, otp });
+export const sendOTP = (email, purpose = "register", uid = null) =>
+  api.post(
+    "/api/otp/send",
+    {
+      email: email.trim().toLowerCase(),
+      purpose,
+      ...(uid ? { uid } : {}),
+    },
+    { timeout: 20000 },
+  );
+
+export const verifyOTP = (email, otp, purpose = "register", uid = null) =>
+  api.post(
+    "/api/otp/verify",
+    {
+      email: email.trim().toLowerCase(),
+      otp: String(otp).trim(),
+      purpose,
+      ...(uid ? { uid } : {}),
+    },
+    { timeout: 20000 },
+  );
 
 export default api;
