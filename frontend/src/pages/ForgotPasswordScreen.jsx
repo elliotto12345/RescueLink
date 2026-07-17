@@ -14,7 +14,8 @@ import {
 import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import ScreenHeader from "../components/layout/ScreenHeader";
-import { resetPassword } from "../services/authService";
+import { sendPasswordResetOTP } from "../services/authService";
+import { formatApiError } from "../services/otpService";
 import { colors } from "../constants/theme";
 
 export default function ForgotPasswordScreen({ navigation }) {
@@ -29,14 +30,29 @@ export default function ForgotPasswordScreen({ navigation }) {
 
     setLoading(true);
     try {
-      await resetPassword(email);
+      const result = await sendPasswordResetOTP(email);
+      const normalizedEmail = email.trim().toLowerCase();
+
+      navigation.navigate("VerifyOTP", {
+        email: normalizedEmail,
+        purpose: "reset",
+      });
+
       Alert.alert(
-        "Email Sent",
-        "Check your inbox for password reset instructions.",
-        [{ text: "OK", onPress: () => navigation.navigate("Login") }],
+        "Check Your Email",
+        `We sent a password reset code to ${normalizedEmail}. Enter it on the next screen.`,
       );
+
+      if (__DEV__ && result.devOtp) {
+        Alert.alert("Development", `Reset code: ${result.devOtp}`);
+      }
     } catch (error) {
-      Alert.alert("Error", error.message || "Could not send reset email.");
+      const status = error.response?.status;
+      if (status === 404) {
+        Alert.alert("Account Not Found", "No account exists with this email.");
+      } else {
+        Alert.alert("Could Not Send Code", formatApiError(error));
+      }
     } finally {
       setLoading(false);
     }
@@ -51,8 +67,8 @@ export default function ForgotPasswordScreen({ navigation }) {
       >
         <ScrollView showsVerticalScrollIndicator={false}>
           <ScreenHeader
-            title="Forgot Password? 🔑"
-            subtitle="Enter your email and we'll send you reset instructions."
+            title="Forgot Password"
+            subtitle="We'll email you a secure verification code to reset your password."
             onBack={() => navigation.goBack()}
           />
 
@@ -65,7 +81,7 @@ export default function ForgotPasswordScreen({ navigation }) {
               onChangeText={setEmail}
             />
             <Button
-              title="Send Reset Link"
+              title="Send Reset Code"
               onPress={handleReset}
               loading={loading}
             />

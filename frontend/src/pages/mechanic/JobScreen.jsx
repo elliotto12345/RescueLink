@@ -6,41 +6,173 @@ import {
   SafeAreaView,
   StatusBar,
   ScrollView,
+  TextInput,
+  Alert,
 } from "react-native";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import {
+  connectSocket,
+  emitMechanicOnTheWay,
+  emitMechanicArrived,
+  emitServiceComplete,
+  getSocket,
+} from "../../services/socket";
+import { updateServiceRequestStatus, subscribeToServiceRequest } from "../../services/requestService";
+import { REQUEST_STATUS, JOB_STEP } from "../../constants/requestStatus";
+import { getUser } from "../../services/storage";
+import { ROLES } from "../../constants/roles";
 
 const statusSteps = [
-  { id: 1, key: "accepted", label: "Job Accepted", emoji: "✅" },
-  { id: 2, key: "ontheway", label: "On The Way", emoji: "🚗" },
-  { id: 3, key: "arrived", label: "Arrived", emoji: "📍" },
-  { id: 4, key: "completed", label: "Job Completed", emoji: "🎉" },
+  { id: 1, key: JOB_STEP.ACCEPTED, label: "Job Accepted", emoji: "✅" },
+  { id: 2, key: JOB_STEP.ON_THE_WAY, label: "On The Way", emoji: "🚗" },
+  { id: 3, key: JOB_STEP.ARRIVED, label: "Arrived", emoji: "📍" },
+  { id: 4, key: JOB_STEP.COMPLETED, label: "Job Completed", emoji: "🎉" },
 ];
 
 export default function JobScreen({ navigation, route }) {
   const request = route?.params?.request;
+  const readOnly = request?.readOnly;
 
-  const [currentStatus, setCurrentStatus] = useState("accepted");
+  const [currentStatus, setCurrentStatus] = useState(JOB_STEP.ACCEPTED);
+  const [mechanicArrived, setMechanicArrived] = useState(false);
+  const [driverArrived, setDriverArrived] = useState(false);
+  const [chargeAmount, setChargeAmount] = useState(() =>
+    request?.amount != null ? String(request.amount) : "",
+  );
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!request?.id) return;
+
+    const initSocket = async () => {
+      const user = await getUser();
+      if (!user?.id) return;
+
+      const socket = getSocket() || connectSocket(user.id, user.role || ROLES.PROVIDER);
+
+      socket.off("driverArrived");
+      socket.on("driverArrived", (data) => {
+        if (data.requestId && data.requestId !== request.id) return;
+        setDriverArrived(true);
+        Alert.alert(
+          "Driver Confirmed Arrival",
+          `${data.userName || "The driver"} confirmed you have arrived.`,
+        );
+      });
+    };
+
+    initSocket();
+
+    const unsubscribe = subscribeToServiceRequest(request.id, (data) => {
+      if (data.driverArrived) {
+        setDriverArrived(true);
+      }
+      if (data.mechanicArrived) {
+        setMechanicArrived(true);
+      }
+      if (data.mechanicArrived && data.driverArrived) {
+        setCurrentStatus(JOB_STEP.ARRIVED);
+      }
+    });
+
+    return unsubscribe;
+  }, [request?.id]);
 
   const getCurrentStepIndex = () =>
     statusSteps.findIndex((s) => s.key === currentStatus);
 
-  const handleNextStatus = () => {
-    const currentIndex = getCurrentStepIndex();
-    if (currentIndex < statusSteps.length - 1) {
-      setCurrentStatus(statusSteps[currentIndex + 1].key);
+  const bothArrived = mechanicArrived && driverArrived;
+
+  const buildPayload = (user) => ({
+    requestId: request.id,
+    id: request.id,
+    userId: request.userId,
+    userName: request.user,
+    mechanicId: user.id,
+    mechanicName: user.name,
+    issue: request.issue,
+  });
+
+  const handleNextStatus = async () => {
+    const user = await getUser();
+    if (!user?.id || !request?.id || submitting) return;
+
+    setSubmitting(true);
+    try {
+      if (currentStatus === JOB_STEP.ACCEPTED) {
+        await updateServiceRequestStatus(request.id, REQUEST_STATUS.ON_THE_WAY, {
+          onTheWayAt: new Date().toISOString(),
+        });
+        emitMechanicOnTheWay(buildPayload(user));
+        setCurrentStatus(JOB_STEP.ON_THE_WAY);
+        return;
+      }
+
+      if (currentStatus === JOB_STEP.ON_THE_WAY) {
+        await updateServiceRequestStatus(request.id, REQUEST_STATUS.ARRIVED, {
+          mechanicArrivedAt: new Date().toISOString(),
+          mechanicArrived: true,
+        });
+        emitMechanicArrived(buildPayload(user));
+        setMechanicArrived(true);
+        if (driverArrived) {
+          setCurrentStatus(JOB_STEP.ARRIVED);
+        }
+        return;
+      }
+
+      if (currentStatus === JOB_STEP.ARRIVED) {
+        const amount = parseFloat(chargeAmount);
+        if (!chargeAmount || Number.isNaN(amount) || amount <= 0) {
+          Alert.alert("Enter Amount", "Please enter the service charge amount.");
+          return;
+        }
+
+        await updateServiceRequestStatus(request.id, REQUEST_STATUS.SERVICE_COMPLETE, {
+          completedAt: new Date().toISOString(),
+          amount,
+          currency: "GHS",
+        });
+        emitServiceComplete({ ...buildPayload(user), amount, currency: "GHS" });
+        setCurrentStatus(JOB_STEP.COMPLETED);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Could not update job status. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
+  useEffect(() => {
+    if (mechanicArrived && driverArrived && currentStatus === JOB_STEP.ON_THE_WAY) {
+      setCurrentStatus(JOB_STEP.ARRIVED);
+    }
+  }, [mechanicArrived, driverArrived, currentStatus]);
+
   const getNextButtonLabel = () => {
-    if (currentStatus === "accepted") return "Start Journey 🚗";
-    if (currentStatus === "ontheway") return "I Have Arrived 📍";
-    if (currentStatus === "arrived") return "Mark as Completed 🎉";
+    if (currentStatus === JOB_STEP.ACCEPTED) return "Start Journey 🚗";
+    if (currentStatus === JOB_STEP.ON_THE_WAY) {
+      return mechanicArrived && !driverArrived
+        ? "Waiting for Driver Confirmation..."
+        : "I Have Arrived 📍";
+    }
+    if (currentStatus === JOB_STEP.ARRIVED) return "Mark as Completed 🎉";
     return "Job Completed!";
   };
 
   const getNextButtonColor = () => {
-    if (currentStatus === "completed") return "#16A34A";
+    if (currentStatus === JOB_STEP.COMPLETED) return "#16A34A";
+    if (currentStatus === JOB_STEP.ON_THE_WAY && mechanicArrived && !driverArrived) {
+      return "#9CA3AF";
+    }
     return "#2563EB";
+  };
+
+  const isNextDisabled = () => {
+    if (submitting) return true;
+    if (currentStatus === JOB_STEP.ON_THE_WAY && mechanicArrived) return true;
+    if (currentStatus === JOB_STEP.ARRIVED && !bothArrived) return true;
+    return false;
   };
 
   if (!request) {
@@ -68,7 +200,6 @@ export default function JobScreen({ navigation, route }) {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={styles.backText}>← Back</Text>
@@ -77,7 +208,6 @@ export default function JobScreen({ navigation, route }) {
           <View style={{ width: 50 }} />
         </View>
 
-        {/* User Info Card */}
         <View style={styles.userCard}>
           <View style={styles.userCardHeader}>
             <Text style={styles.userCardTitle}>Customer Details</Text>
@@ -95,21 +225,29 @@ export default function JobScreen({ navigation, route }) {
                 📍 {request.location || request.address || "Location shared"}
               </Text>
               {request.distance ? (
-                <Text style={styles.userDistance}>
-                  🗺️ {request.distance} away
-                </Text>
+                <Text style={styles.userDistance}>🗺️ {request.distance} away</Text>
               ) : null}
             </View>
           </View>
 
-          {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity style={styles.callButton}>
               <Text style={styles.callButtonText}>📞 Call</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.chatButton}
-              onPress={() => navigation.navigate("Chat")}
+              onPress={() =>
+                navigation.navigate("Chat", {
+                  requestId: request.id,
+                  issue: request.issue,
+                  driver: { id: request.userId, name: request.user },
+                  otherParty: {
+                    id: request.userId,
+                    name: request.user,
+                    subtitle: request.issue,
+                  },
+                })
+              }
             >
               <Text style={styles.chatButtonText}>💬 Chat</Text>
             </TouchableOpacity>
@@ -119,14 +257,30 @@ export default function JobScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* Map Placeholder */}
+        {(mechanicArrived || driverArrived) && currentStatus !== JOB_STEP.COMPLETED && (
+          <View style={styles.arrivalCard}>
+            <Text style={styles.arrivalTitle}>Arrival Confirmation</Text>
+            <View style={styles.arrivalRow}>
+              <Text style={styles.arrivalLabel}>You arrived</Text>
+              <Text style={styles.arrivalStatus}>
+                {mechanicArrived ? "✅ Confirmed" : "⏳ Pending"}
+              </Text>
+            </View>
+            <View style={styles.arrivalRow}>
+              <Text style={styles.arrivalLabel}>Driver confirmed</Text>
+              <Text style={styles.arrivalStatus}>
+                {driverArrived ? "✅ Confirmed" : "⏳ Waiting..."}
+              </Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.mapPlaceholder}>
           <Text style={styles.mapEmoji}>🗺️</Text>
           <Text style={styles.mapText}>Navigation Map</Text>
           <Text style={styles.mapSubText}>Live map coming soon</Text>
         </View>
 
-        {/* Status Timeline */}
         <View style={styles.timelineCard}>
           <Text style={styles.timelineTitle}>Job Status</Text>
           {statusSteps.map((step, index) => {
@@ -159,9 +313,7 @@ export default function JobScreen({ navigation, route }) {
                       {step.label}
                     </Text>
                     {isActive && (
-                      <Text style={styles.timelineActiveTag}>
-                        Current Status
-                      </Text>
+                      <Text style={styles.timelineActiveTag}>Current Status</Text>
                     )}
                   </View>
                   {isDone && !isActive && (
@@ -181,23 +333,56 @@ export default function JobScreen({ navigation, route }) {
           })}
         </View>
 
-        {/* Next Status Button */}
-        {currentStatus !== "completed" ? (
+        {readOnly && (
+          <View style={styles.readOnlyBanner}>
+            <Text style={styles.readOnlyTitle}>Completed Service Record</Text>
+            <Text style={styles.readOnlyText}>
+              {request.issue} · {request.user || "Driver"}
+            </Text>
+            {request.amount != null && (
+              <Text style={styles.readOnlyAmount}>Earned: GHS {request.amount}</Text>
+            )}
+          </View>
+        )}
+
+        {currentStatus === JOB_STEP.ARRIVED && bothArrived && !readOnly && (
+          <View style={styles.chargeCard}>
+            <Text style={styles.chargeTitle}>Service Charge</Text>
+            <Text style={styles.chargeHint}>
+              Enter the amount to charge the driver after completing the service.
+            </Text>
+            <View style={styles.chargeInputRow}>
+              <Text style={styles.chargeCurrency}>GHS</Text>
+              <TextInput
+                style={styles.chargeInput}
+                placeholder="0.00"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="decimal-pad"
+                value={chargeAmount}
+                onChangeText={setChargeAmount}
+              />
+            </View>
+          </View>
+        )}
+
+        {!readOnly && currentStatus !== JOB_STEP.COMPLETED ? (
           <TouchableOpacity
             style={[
               styles.nextButton,
               { backgroundColor: getNextButtonColor() },
+              isNextDisabled() && styles.nextButtonDisabled,
             ]}
             onPress={handleNextStatus}
+            disabled={isNextDisabled()}
           >
             <Text style={styles.nextButtonText}>{getNextButtonLabel()}</Text>
           </TouchableOpacity>
-        ) : (
+        ) : !readOnly ? (
           <View style={styles.completedBanner}>
             <Text style={styles.completedEmoji}>🎉</Text>
             <Text style={styles.completedTitle}>Job Completed!</Text>
             <Text style={styles.completedSubtitle}>
-              Great work! The customer has been helped.
+              The driver has been notified to proceed with payment of GHS {chargeAmount}.
             </Text>
             <TouchableOpacity
               style={styles.backHomeButton}
@@ -206,7 +391,7 @@ export default function JobScreen({ navigation, route }) {
               <Text style={styles.backHomeButtonText}>Back to Dashboard</Text>
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -335,6 +520,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
+  arrivalCard: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  arrivalTitle: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginBottom: 12,
+  },
+  arrivalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  arrivalLabel: {
+    fontSize: 14,
+    color: "#374151",
+  },
+  arrivalStatus: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2563EB",
+  },
   mapPlaceholder: {
     marginHorizontal: 24,
     backgroundColor: "#E5E7EB",
@@ -436,6 +650,74 @@ const styles = StyleSheet.create({
   timelineLineDone: {
     backgroundColor: "#2563EB",
   },
+  chargeCard: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  chargeTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginBottom: 6,
+  },
+  chargeHint: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  chargeInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 16,
+  },
+  chargeCurrency: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#374151",
+    marginRight: 8,
+  },
+  chargeInput: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#1F2937",
+    paddingVertical: 14,
+  },
+  readOnlyBanner: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: "#DCFCE7",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  readOnlyTitle: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#15803D",
+    marginBottom: 6,
+  },
+  readOnlyText: {
+    fontSize: 14,
+    color: "#374151",
+  },
+  readOnlyAmount: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#16A34A",
+    marginTop: 8,
+  },
   nextButton: {
     marginHorizontal: 24,
     paddingVertical: 18,
@@ -443,10 +725,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
+  nextButtonDisabled: {
+    opacity: 0.7,
+  },
   nextButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+    textAlign: "center",
   },
   completedBanner: {
     marginHorizontal: 24,

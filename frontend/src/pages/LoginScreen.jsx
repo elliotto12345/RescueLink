@@ -15,6 +15,7 @@ import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import ScreenHeader from "../components/layout/ScreenHeader";
 import { loginUser } from "../services/authService";
+import { requestOtp, formatApiError } from "../services/otpService";
 import { useAuth } from "../contexts/AuthContext";
 import { getDashboardForRole } from "../constants/roles";
 import { colors } from "../constants/theme";
@@ -38,7 +39,32 @@ export default function LoginScreen({ navigation }) {
       Alert.alert("Success", `Welcome back ${user.name}! 👋`);
       navigation.replace(getDashboardForRole(user.role));
     } catch (error) {
-      Alert.alert("Error", "Invalid email or password. Please try again.");
+      if (error.code === "auth/email-not-verified") {
+        Alert.alert("Verify Email", error.message, [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Send Code",
+            onPress: async () => {
+              try {
+                const result = await requestOtp(error.email, "register", error.uid);
+                navigation.navigate("VerifyOTP", {
+                  email: error.email,
+                  uid: error.uid,
+                  purpose: "register",
+                });
+
+                if (__DEV__ && result.devOtp) {
+                  Alert.alert("Development", `Verification code: ${result.devOtp}`);
+                }
+              } catch (sendError) {
+                Alert.alert("Could Not Send Code", formatApiError(sendError));
+              }
+            },
+          },
+        ]);
+      } else {
+        Alert.alert("Error", "Invalid email or password. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

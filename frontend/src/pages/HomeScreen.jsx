@@ -134,8 +134,8 @@ export default function HomeScreen({ navigation }) {
         <Card style={styles.contact}>
           <Text style={styles.contactTitle}>Contact Us</Text>
           <Text style={styles.contactText}>📧 support@rescuelink.com</Text>
-          <Text style={styles.contactText}>📞 +233 30 000 0000</Text>
-          <Text style={styles.contactText}>📍 Accra, Ghana</Text>
+          <Text style={styles.contactText}>📞 +233 595855527</Text>
+          <Text style={styles.contactText}>📍 Kumasi, Ghana</Text>
         </Card>
 
         <Text style={styles.footer}>

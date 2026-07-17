@@ -13,11 +13,16 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase": "^12.14.0",
+    "firebase-admin": "^14.1.0",
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^8.0.10",
     "pg": "^8.21.0",
     "prisma": "^5.22.0",
     "socket.io": "^4.8.3",
     "twilio": "^4.23.0"
+  },
+  "overrides": {
+    "jwks-rsa": "3.1.0",
+    "jose": "4.15.9"
   }
 }

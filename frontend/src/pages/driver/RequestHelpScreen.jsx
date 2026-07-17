@@ -15,8 +15,12 @@ import {
 import * as Location from "expo-location";
 import { getUser } from "../../services/storage";
 import { connectSocket, emitNewRequest } from "../../services/socket";
-import { createServiceRequest } from "../../services/requestService";
+import {
+  createServiceRequest,
+  saveActiveServiceRequest,
+} from "../../services/requestService";
 import { fetchNearbyMechanicsWithStatus } from "../../services/mechanicService";
+import { ensureChatThread, buildConversationId } from "../../services/chatService";
 import {
   formatDistance,
   sortMechanicsByOnlineAndDistance,
@@ -159,6 +163,22 @@ export default function RequestHelpScreen({ navigation }) {
         description,
         mechanicId: selectedMechanic.id,
         mechanicName: selectedMechanic.name,
+      });
+
+      await saveActiveServiceRequest({
+        requestId: serviceRequest.id,
+        mechanic: selectedMechanic,
+        service: issueLabel,
+      });
+
+      await ensureChatThread({
+        conversationId: buildConversationId(user.id, selectedMechanic.id),
+        requestId: serviceRequest.id,
+        driverId: user.id,
+        mechanicId: selectedMechanic.id,
+        driverName: user.name,
+        mechanicName: selectedMechanic.name,
+        issue: issueLabel,
       });
 
       connectSocket(user?.id, user?.role || ROLES.DRIVER);

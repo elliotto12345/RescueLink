@@ -18,14 +18,16 @@ if (-not (Test-Path ".env")) {
 }
 
 Write-Host "Setting Railway variables from backend/.env..."
-Write-Host "(Skip FIREBASE_SERVICE_ACCOUNT here if it fails — paste it in Railway dashboard Variables instead.)"
+Write-Host "(Skip FIREBASE_SERVICE_ACCOUNT here if it fails - paste it in Railway dashboard Variables instead.)"
 Get-Content ".env" | ForEach-Object {
   $line = $_.Trim()
   if ($line -eq "" -or $line.StartsWith("#")) { return }
   if ($line -match "^([^=]+)=(.*)$") {
     $name = $matches[1].Trim()
     if ($name -eq "FIREBASE_SERVICE_ACCOUNT") {
-      Write-Host "  -> $name (set manually in Railway dashboard — JSON is too large for CLI)"
+      Write-Host "  -> $name (via stdin, parsed from .env file)"
+      node -e "const fs=require('fs'); for (const line of fs.readFileSync('.env','utf8').split(/\r?\n/)) { if (line.startsWith('FIREBASE_SERVICE_ACCOUNT=')) { process.stdout.write(line.slice('FIREBASE_SERVICE_ACCOUNT='.length)); break; } }" |
+        npx --yes @railway/cli variables set FIREBASE_SERVICE_ACCOUNT --stdin 2>$null
       return
     }
     if ($name -eq "NODE_ENV") {

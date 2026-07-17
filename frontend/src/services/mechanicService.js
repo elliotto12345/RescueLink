@@ -1,6 +1,7 @@
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { ROLES } from "../constants/roles";
+import { normalizeRating } from "./ratingService";
 
 /** Stale sessions (e.g. app killed) fall back to offline after this window. */
 export const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
@@ -45,7 +46,7 @@ export async function fetchNearbyMechanicsWithStatus() {
   return registered.map((mechanic) => ({
     ...mechanic,
     jobs: mechanic.totalJobs ?? mechanic.jobs ?? 0,
-    rating: mechanic.rating ?? 0,
+    rating: normalizeRating(mechanic.rating),
     online: isMechanicOnlineInFirestore(mechanic),
   }));
 }

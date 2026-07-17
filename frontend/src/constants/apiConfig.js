@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 
 /** Update after Railway deploy, or set EXPO_PUBLIC_API_URL in frontend/.env */
 export const RAILWAY_URL =
-  "https://rescuelink-production-cb78.up.railway.app";
+  "https://rescuelink-backend-production.up.railway.app";
 
 function useRailwayInDev() {
   const flag = process.env.EXPO_PUBLIC_USE_RAILWAY;

@@ -12,6 +12,7 @@ export default function Input({
   autoCapitalize = "none",
   multiline = false,
   numberOfLines = 1,
+  maxLength,
   style,
 }) {
   return (
@@ -28,6 +29,7 @@ export default function Input({
         autoCapitalize={autoCapitalize}
         multiline={multiline}
         numberOfLines={numberOfLines}
+        maxLength={maxLength}
       />
     </View>
   );
@@ -50,7 +52,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     backgroundColor: colors.inputBg,
-    flexWrap: "wrap",
   },
   multiline: {
     minHeight: 100,

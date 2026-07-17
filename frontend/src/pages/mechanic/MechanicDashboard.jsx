@@ -16,6 +16,8 @@ import { connectSocket, sendLocation, emitAcceptRequest, emitDeclineRequest, get
 import { updateMechanicLocation } from "../../services/mechanicPresence";
 import {
   fetchPendingServiceRequestsForMechanic,
+  fetchCompletedJobsForMechanic,
+  fetchMechanicStats,
   mapRequestToJob,
   updateServiceRequestStatus,
 } from "../../services/requestService";
@@ -29,6 +31,16 @@ export default function MechanicDashboard({ navigation }) {
   const [activeTab, setActiveTab] = useState("requests");
   const [liveRequests, setLiveRequests] = useState([]);
   const [completedJobs, setCompletedJobs] = useState([]);
+  const [stats, setStats] = useState({
+    totalJobs: 0,
+    rating: 0,
+    ratingCount: 0,
+    monthlyIncome: 0,
+    totalIncome: 0,
+    jobsThisMonth: 0,
+    averageJobValue: 0,
+    pendingPayment: 0,
+  });
   const [userName, setUserName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -57,10 +69,20 @@ export default function MechanicDashboard({ navigation }) {
     }
   };
 
-  const loadAvailableJobs = async (mechanicId) => {
+  const loadMechanicData = async (mechanicId) => {
     if (!mechanicId) return;
-    const pending = await fetchPendingServiceRequestsForMechanic(mechanicId);
+    const [pending, completed, mechanicStats] = await Promise.all([
+      fetchPendingServiceRequestsForMechanic(mechanicId),
+      fetchCompletedJobsForMechanic(mechanicId),
+      fetchMechanicStats(mechanicId),
+    ]);
     setLiveRequests(pending.map(mapRequestToJob));
+    setCompletedJobs(completed);
+    setStats(mechanicStats);
+  };
+
+  const loadAvailableJobs = async (mechanicId) => {
+    await loadMechanicData(mechanicId);
   };
 
   const handleAcceptRequest = async (request) => {
@@ -244,18 +266,52 @@ export default function MechanicDashboard({ navigation }) {
         {/* Stats Row */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>0</Text>
+            <Text style={styles.statNumber}>{stats.totalJobs}</Text>
             <Text style={styles.statLabel}>Total Jobs</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>—</Text>
-            <Text style={styles.statLabel}>Rating</Text>
+            <Text style={styles.statNumber}>
+              {stats.rating > 0 ? `⭐ ${stats.rating}` : "—"}
+            </Text>
+            <Text style={styles.statLabel}>
+              {stats.ratingCount > 0 ? `${stats.ratingCount} reviews` : "Rating"}
+            </Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>GHS 0</Text>
+            <Text style={styles.statNumber}>GHS {stats.monthlyIncome}</Text>
             <Text style={styles.statLabel}>This Month</Text>
           </View>
         </View>
+
+        {/* Insights */}
+        <TouchableOpacity
+          style={styles.insightsCard}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate("PerformanceInsights")}
+        >
+          <View style={styles.insightsHeader}>
+            <Text style={styles.insightsTitle}>📊 Performance Insights</Text>
+            <Text style={styles.insightsCta}>View full report →</Text>
+          </View>
+          <View style={styles.insightsGrid}>
+            <View style={styles.insightItem}>
+              <Text style={styles.insightValue}>GHS {stats.totalIncome}</Text>
+              <Text style={styles.insightLabel}>Total Earnings</Text>
+            </View>
+            <View style={styles.insightItem}>
+              <Text style={styles.insightValue}>{stats.jobsThisMonth}</Text>
+              <Text style={styles.insightLabel}>Jobs This Month</Text>
+            </View>
+            <View style={styles.insightItem}>
+              <Text style={styles.insightValue}>GHS {stats.averageJobValue}</Text>
+              <Text style={styles.insightLabel}>Avg. Job Value</Text>
+            </View>
+            <View style={styles.insightItem}>
+              <Text style={styles.insightValue}>GHS {stats.pendingPayment}</Text>
+              <Text style={styles.insightLabel}>Pending Payment</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
 
         {/* Tabs */}
         <View style={styles.tabs}>
@@ -367,16 +423,42 @@ export default function MechanicDashboard({ navigation }) {
               </View>
             ) : (
               completedJobs.map((job) => (
-              <View key={job.id} style={styles.completedCard}>
+              <TouchableOpacity
+                key={job.id}
+                style={styles.completedCard}
+                onPress={() =>
+                  navigation.navigate("JobScreen", {
+                    request: {
+                      id: job.id,
+                      user: job.user,
+                      issue: job.issue,
+                      address: job.address,
+                      status: job.status,
+                      amount: job.amount,
+                      readOnly: true,
+                    },
+                  })
+                }
+              >
                 <View style={styles.completedLeft}>
                   <Text style={styles.completedUser}>{job.user}</Text>
                   <Text style={styles.completedIssue}>🔧 {job.issue}</Text>
                   <Text style={styles.completedDate}>📅 {job.date}</Text>
+                  {job.address ? (
+                    <Text style={styles.completedAddress} numberOfLines={1}>
+                      📍 {job.address}
+                    </Text>
+                  ) : null}
                 </View>
-                <View style={styles.earnedBadge}>
-                  <Text style={styles.earnedText}>{job.earned}</Text>
+                <View style={styles.completedRight}>
+                  <View style={styles.earnedBadge}>
+                    <Text style={styles.earnedText}>{job.earned}</Text>
+                  </View>
+                  {job.status === "service_complete" && (
+                    <Text style={styles.pendingLabel}>Awaiting payment</Text>
+                  )}
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
             )}
           </View>
@@ -474,6 +556,60 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginTop: 4,
     textAlign: "center",
+  },
+  insightsCard: {
+    marginHorizontal: 24,
+    marginTop: 8,
+    marginBottom: 8,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#EFF6FF",
+  },
+  insightsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 12,
+  },
+  insightsTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1F2937",
+    flex: 1,
+  },
+  insightsCta: {
+    fontSize: 13,
+    color: "#2563EB",
+    fontWeight: "700",
+  },
+  insightsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  insightItem: {
+    width: "47%",
+    backgroundColor: "#F9FAFB",
+    borderRadius: 14,
+    padding: 14,
+  },
+  insightValue: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#2563EB",
+  },
+  insightLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 4,
   },
   tabs: {
     flexDirection: "row",
@@ -635,6 +771,21 @@ const styles = StyleSheet.create({
   },
   completedLeft: {
     flex: 1,
+    marginRight: 12,
+  },
+  completedRight: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  completedAddress: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 2,
+  },
+  pendingLabel: {
+    fontSize: 11,
+    color: "#D97706",
+    fontWeight: "600",
   },
   completedUser: {
     fontSize: 15,

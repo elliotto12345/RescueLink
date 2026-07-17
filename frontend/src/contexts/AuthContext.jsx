@@ -18,11 +18,14 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser && firebaseUser.emailVerified) {
+      if (firebaseUser) {
         const profile = await fetchUserProfile(firebaseUser.uid);
-        if (profile) {
+        const isVerified = profile?.emailVerified || firebaseUser.emailVerified;
+        if (isVerified && profile) {
           setUser(profile);
           await saveUser(profile, profile.id);
+        } else {
+          setUser(null);
         }
       } else {
         const cached = await getUser();

@@ -12,8 +12,8 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
-import { connectSocket, disconnectSocket, emitCancelRequest } from "../../services/socket";
-import { updateServiceRequestStatus } from "../../services/requestService";
+import { connectSocket, disconnectSocket, emitCancelRequest, emitDriverArrived } from "../../services/socket";
+import { updateServiceRequestStatus, subscribeToServiceRequest, clearActiveServiceRequest } from "../../services/requestService";
 import { REQUEST_STATUS } from "../../constants/requestStatus";
 import { getUser } from "../../services/storage";
 import { ROLES } from "../../constants/roles";
@@ -26,23 +26,159 @@ export default function TrackMechanicScreen({ navigation, route }) {
   const mechanic = selectedMechanic;
   const [status, setStatus] = useState(() => {
     if (waitingForAcceptance) return "Pending";
-    if (selectedMechanic) return "Found";
+    if (selectedMechanic) return "Accepted";
     return "Searching";
   });
+  const [mechanicArrived, setMechanicArrived] = useState(false);
+  const [driverArrived, setDriverArrived] = useState(false);
+  const [serviceAmount, setServiceAmount] = useState(null);
+  const [canCancel, setCanCancel] = useState(waitingForAcceptance);
   const [userLocation, setUserLocation] = useState(null);
   const [mechanicLocation, setMechanicLocation] = useState(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const mapRef = useRef(null);
+  const lastRequestRef = useRef(null);
+  const mechanicName = mechanic?.name || "Your mechanic";
 
   useEffect(() => {
     getUserLocation();
     startPulseAnimation();
     initSocket();
-
-    return () => {
-      disconnectSocket();
-    };
   }, []);
+
+  useEffect(() => {
+    if (!requestId) return;
+
+    const unsubscribe = subscribeToServiceRequest(requestId, (request) => {
+      syncFromRequest(request);
+    });
+
+    return unsubscribe;
+  }, [requestId]);
+
+  const notifyDriverTransition = (request, prev) => {
+    if (!prev) return;
+
+    if (
+      request.status === REQUEST_STATUS.ACCEPTED &&
+      prev.status === REQUEST_STATUS.PENDING
+    ) {
+      setCanCancel(false);
+      Alert.alert(
+        "Request Accepted",
+        `${request.mechanicName || mechanicName} accepted your request. You can no longer cancel.`,
+      );
+    }
+
+    if (
+      request.status === REQUEST_STATUS.ON_THE_WAY &&
+      prev.status !== REQUEST_STATUS.ON_THE_WAY
+    ) {
+      Alert.alert(
+        "Mechanic On The Way",
+        `${request.mechanicName || mechanicName} is heading to your location.`,
+      );
+    }
+
+    if (request.mechanicArrived && !prev.mechanicArrived) {
+      Alert.alert(
+        "Mechanic Has Arrived",
+        `${request.mechanicName || mechanicName} confirmed arrival. Please confirm when you see them.`,
+      );
+    }
+
+    if (
+      request.status === REQUEST_STATUS.SERVICE_COMPLETE &&
+      prev.status !== REQUEST_STATUS.SERVICE_COMPLETE
+    ) {
+      const amount = request.amount ?? 0;
+      Alert.alert(
+        "Service Completed",
+        `${request.mechanicName || mechanicName} completed the service. Please pay GHS ${amount}.`,
+        [
+          {
+            text: "Pay Now",
+            onPress: () => {
+              navigation.navigate("Payments", {
+                service: serviceType,
+                provider: request.mechanicName || mechanicName,
+                amount,
+                currency: request.currency || "GHS",
+                fromServiceFlow: true,
+                requestId,
+                mechanicId: mechanic?.id || request.mechanicId,
+              });
+            },
+          },
+          { text: "Later", style: "cancel" },
+        ],
+      );
+    }
+  };
+
+  const syncFromRequest = (request) => {
+    const prev = lastRequestRef.current;
+    lastRequestRef.current = request;
+
+    const mechanicConfirmed = Boolean(request.mechanicArrived);
+    const driverConfirmed = Boolean(request.driverArrived);
+
+    notifyDriverTransition(request, prev);
+
+    if (mechanicConfirmed) setMechanicArrived(true);
+    if (driverConfirmed) setDriverArrived(true);
+
+    if (request.status === REQUEST_STATUS.PENDING) {
+      setStatus("Pending");
+      setCanCancel(true);
+      return;
+    }
+
+    if (request.status === REQUEST_STATUS.ACCEPTED) {
+      setCanCancel(false);
+      setStatus("Accepted");
+      return;
+    }
+
+    if (request.status === REQUEST_STATUS.ON_THE_WAY) {
+      setCanCancel(false);
+      setStatus("OnTheWay");
+      return;
+    }
+
+    if (request.status === REQUEST_STATUS.ARRIVED) {
+      setCanCancel(false);
+      if (mechanicConfirmed && driverConfirmed) {
+        setStatus("Arrived");
+      } else {
+        setStatus(mechanicConfirmed ? "MechanicArrived" : "OnTheWay");
+      }
+      return;
+    }
+
+    if (request.status === REQUEST_STATUS.SERVICE_COMPLETE) {
+      setServiceAmount(request.amount ?? null);
+      setStatus("AwaitingPayment");
+      return;
+    }
+
+    if (request.status === REQUEST_STATUS.DECLINED) {
+      setStatus("Declined");
+      clearActiveServiceRequest();
+      return;
+    }
+
+    if (request.status === REQUEST_STATUS.CANCELLED) {
+      setStatus("Cancelled");
+      clearActiveServiceRequest();
+    }
+  };
+
+  useEffect(() => {
+    if (mechanicArrived && driverArrived) {
+      setStatus("Arrived");
+    }
+  }, [mechanicArrived, driverArrived]);
 
   const startPulseAnimation = () => {
     Animated.loop(
@@ -92,15 +228,64 @@ export default function TrackMechanicScreen({ navigation, route }) {
 
     socket.off("requestAccepted");
     socket.off("requestDeclined");
+    socket.off("mechanicOnTheWay");
+    socket.off("mechanicArrived");
+    socket.off("serviceComplete");
 
     socket.on("requestAccepted", (data) => {
       if (requestId && data.requestId && data.requestId !== requestId) return;
+      setCanCancel(false);
+      setStatus("Accepted");
       Alert.alert(
         "Request Accepted",
-        `${data.mechanicName || mechanic?.name || "Your mechanic"} accepted your request and is on the way.`,
+        `${data.mechanicName || mechanic?.name || "Your mechanic"} accepted your request. You can no longer cancel this request.`,
       );
-      setStatus("Found");
-      setTimeout(() => setStatus("OnTheWay"), 2000);
+    });
+
+    socket.on("mechanicOnTheWay", (data) => {
+      if (requestId && data.requestId && data.requestId !== requestId) return;
+      setStatus("OnTheWay");
+      Alert.alert(
+        "Mechanic On The Way",
+        `${data.mechanicName || mechanic?.name || "Your mechanic"} is on the way to your location.`,
+      );
+    });
+
+    socket.on("mechanicArrived", (data) => {
+      if (requestId && data.requestId && data.requestId !== requestId) return;
+      setMechanicArrived(true);
+      Alert.alert(
+        "Mechanic Has Arrived",
+        `${data.mechanicName || mechanic?.name || "Your mechanic"} confirmed arrival. Please confirm when you see them.`,
+      );
+    });
+
+    socket.on("serviceComplete", (data) => {
+      if (requestId && data.requestId && data.requestId !== requestId) return;
+      const amount = data.amount ?? 0;
+      setServiceAmount(amount);
+      setStatus("AwaitingPayment");
+      Alert.alert(
+        "Service Completed",
+        `${data.mechanicName || mechanic?.name || "Your mechanic"} has completed the service. Please proceed to pay GHS ${amount}.`,
+        [
+          {
+            text: "Pay Now",
+            onPress: () => {
+              navigation.navigate("Payments", {
+                service: serviceType,
+                provider: mechanic?.name || data.mechanicName || "Provider",
+                amount,
+                currency: data.currency || "GHS",
+                fromServiceFlow: true,
+                requestId,
+                mechanicId: mechanic?.id || data.mechanicId,
+              });
+            },
+          },
+          { text: "Later", style: "cancel" },
+        ],
+      );
     });
 
     socket.on("requestDeclined", (data) => {
@@ -138,7 +323,7 @@ export default function TrackMechanicScreen({ navigation, route }) {
     });
   };
 
-  const handleConfirmMechanicArrived = () => {
+  const handleConfirmMechanicArrived = async () => {
     Alert.alert(
       "Confirm Arrival",
       "Has your mechanic arrived at your location?",
@@ -146,33 +331,41 @@ export default function TrackMechanicScreen({ navigation, route }) {
         { text: "Not Yet", style: "cancel" },
         {
           text: "Yes, They've Arrived",
-          onPress: () => setStatus("Arrived"),
-        },
-      ],
-    );
-  };
-
-  const handleConfirmServiceComplete = () => {
-    Alert.alert(
-      "Confirm Service",
-      "Has the mechanic completed the service to your satisfaction?",
-      [
-        { text: "Not Yet", style: "cancel" },
-        {
-          text: "Yes, Completed",
-          onPress: () => {
-            setStatus("Completed");
-            navigation.navigate("Payments", {
-              service: serviceType,
-              provider: mechanic?.name || "Provider",
-              amount: route.params?.amount ?? 0,
-              currency: "GHS",
-              fromServiceFlow: true,
+          onPress: async () => {
+            const user = await getUser();
+            setDriverArrived(true);
+            try {
+              await updateServiceRequestStatus(requestId, REQUEST_STATUS.ARRIVED, {
+                driverArrived: true,
+                driverArrivedAt: new Date().toISOString(),
+              });
+            } catch (error) {
+              console.error("Could not confirm arrival:", error);
+            }
+            emitDriverArrived({
+              requestId,
+              id: requestId,
+              userId: user?.id,
+              userName: user?.name,
+              mechanicId: mechanic?.id,
+              mechanicName: mechanic?.name,
             });
           },
         },
       ],
     );
+  };
+
+  const handleProceedToPayment = () => {
+    navigation.navigate("Payments", {
+      service: serviceType,
+      provider: mechanic?.name || "Provider",
+      amount: serviceAmount ?? route.params?.amount ?? 0,
+      currency: "GHS",
+      fromServiceFlow: true,
+      requestId,
+      mechanicId: mechanic?.id,
+    });
   };
 
   const handleCancelRequest = () => {
@@ -207,6 +400,7 @@ export default function TrackMechanicScreen({ navigation, route }) {
             } catch (error) {
               console.error("Could not cancel request:", error);
             } finally {
+              await clearActiveServiceRequest();
               disconnectSocket();
               navigation.reset({
                 index: 0,
@@ -244,6 +438,14 @@ export default function TrackMechanicScreen({ navigation, route }) {
         color: "#D97706",
         bg: "#FEF3C7",
       };
+    if (status === "Accepted")
+      return {
+        emoji: "✅",
+        title: "Mechanic Accepted!",
+        subtitle: `${mechanic?.name || "Your mechanic"} accepted your request. Waiting for them to start their journey.`,
+        color: "#16A34A",
+        bg: "#DCFCE7",
+      };
     if (status === "Found")
       return {
         emoji: "✅",
@@ -256,17 +458,33 @@ export default function TrackMechanicScreen({ navigation, route }) {
       return {
         emoji: "🚗",
         title: "Mechanic On The Way!",
-        subtitle: "Tap below when your mechanic arrives",
+        subtitle: `${mechanicName} is heading to you. You'll confirm when they arrive.`,
         color: "#2563EB",
         bg: "#EFF6FF",
+      };
+    if (status === "MechanicArrived" || (mechanicArrived && !driverArrived))
+      return {
+        emoji: "📍",
+        title: "Mechanic Has Arrived!",
+        subtitle: "Your mechanic confirmed arrival. Tap the button below to confirm and continue.",
+        color: "#7C3AED",
+        bg: "#EDE9FE",
       };
     if (status === "Arrived")
       return {
         emoji: "🔧",
-        title: "Mechanic Has Arrived",
-        subtitle: "Confirm when the service has been completed",
+        title: "Service In Progress",
+        subtitle: "Your mechanic is working on your vehicle. You'll be notified when service is complete.",
         color: "#7C3AED",
         bg: "#EDE9FE",
+      };
+    if (status === "AwaitingPayment")
+      return {
+        emoji: "💳",
+        title: "Service Completed",
+        subtitle: `Proceed to pay GHS ${serviceAmount ?? 0} for your service.`,
+        color: "#16A34A",
+        bg: "#DCFCE7",
       };
     if (status === "Completed")
       return {
@@ -278,12 +496,14 @@ export default function TrackMechanicScreen({ navigation, route }) {
       };
   };
 
+  const needsDriverArrivalConfirm = (status === "OnTheWay" || status === "MechanicArrived" || mechanicArrived) && !driverArrived;
+
   const statusInfo = getStatusInfo();
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={needsDriverArrivalConfirm ? styles.scrollWithFooter : undefined}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -305,6 +525,33 @@ export default function TrackMechanicScreen({ navigation, route }) {
           </Text>
           <Text style={styles.statusSubtitle}>{statusInfo.subtitle}</Text>
         </View>
+
+        {status === "OnTheWay" && !mechanicArrived && (
+          <View style={styles.promptBanner}>
+            <Text style={styles.promptBannerTitle}>🚗 Mechanic On The Way</Text>
+            <Text style={styles.promptBannerText}>
+              {mechanic?.name || "Your mechanic"} is heading to your location. You'll be asked to confirm when they arrive.
+            </Text>
+          </View>
+        )}
+
+        {mechanicArrived && !driverArrived && (
+          <View style={styles.promptBannerUrgent}>
+            <Text style={styles.promptBannerTitle}>📍 Mechanic Has Arrived</Text>
+            <Text style={styles.promptBannerText}>
+              {mechanic?.name || "Your mechanic"} confirmed they are at your location. Tap the button below to confirm and continue.
+            </Text>
+          </View>
+        )}
+
+        {status === "Accepted" && (
+          <View style={styles.promptBanner}>
+            <Text style={styles.promptBannerTitle}>✅ Request Accepted</Text>
+            <Text style={styles.promptBannerText}>
+              Waiting for {mechanic?.name || "your mechanic"} to start their journey to you.
+            </Text>
+          </View>
+        )}
 
         {/* Live Map */}
         <View style={styles.mapContainer}>
@@ -407,7 +654,9 @@ export default function TrackMechanicScreen({ navigation, route }) {
                 styles.timelineDot,
                 {
                   backgroundColor:
-                    status !== "Searching" && status !== "Pending"
+                    status !== "Searching" &&
+                    status !== "Pending" &&
+                    status !== "Declined"
                       ? "#16A34A"
                       : "#E5E7EB",
                 },
@@ -434,7 +683,9 @@ export default function TrackMechanicScreen({ navigation, route }) {
                 {
                   backgroundColor:
                     status === "OnTheWay" ||
+                    status === "MechanicArrived" ||
                     status === "Arrived" ||
+                    status === "AwaitingPayment" ||
                     status === "Completed"
                       ? "#16A34A"
                       : "#E5E7EB",
@@ -445,7 +696,9 @@ export default function TrackMechanicScreen({ navigation, route }) {
               <Text style={styles.timelineEvent}>Mechanic On The Way</Text>
               <Text style={styles.timelineTime}>
                 {status === "OnTheWay" ||
+                status === "MechanicArrived" ||
                 status === "Arrived" ||
+                status === "AwaitingPayment" ||
                 status === "Completed"
                   ? "Just now"
                   : "Pending..."}
@@ -461,19 +714,21 @@ export default function TrackMechanicScreen({ navigation, route }) {
                 styles.timelineDot,
                 {
                   backgroundColor:
-                    status === "Arrived" || status === "Completed"
+                    status === "Arrived" ||
+                    status === "AwaitingPayment" ||
+                    status === "Completed"
                       ? "#16A34A"
                       : "#E5E7EB",
                 },
               ]}
             />
             <View style={styles.timelineContent}>
-              <Text style={styles.timelineEvent}>Issue Resolved</Text>
+              <Text style={styles.timelineEvent}>Service Completed</Text>
               <Text style={styles.timelineTime}>
-                {status === "Completed"
-                  ? "Just now"
+                {status === "AwaitingPayment" || status === "Completed"
+                  ? "Ready for payment"
                   : status === "Arrived"
-                    ? "Awaiting confirmation"
+                    ? "In progress"
                     : "Pending..."}
               </Text>
             </View>
@@ -481,14 +736,14 @@ export default function TrackMechanicScreen({ navigation, route }) {
         </View>
 
         {/* Action Buttons */}
-        {status === "Pending" && (
+        {status === "Pending" && canCancel && (
           <View style={styles.actions}>
             <View style={styles.waitingCard}>
               <Text style={styles.waitingTitle}>
                 Request sent to {mechanic?.name || "mechanic"}
               </Text>
               <Text style={styles.waitingSubtitle}>
-                You can cancel if they do not respond in time.
+                You can cancel while waiting for the mechanic to accept.
               </Text>
             </View>
             <TouchableOpacity
@@ -503,43 +758,88 @@ export default function TrackMechanicScreen({ navigation, route }) {
         {status !== "Searching" &&
           status !== "Pending" &&
           status !== "Declined" &&
+          status !== "AwaitingPayment" &&
           status !== "Completed" && (
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.chatButton}
-              onPress={() => navigation.navigate("Chat", { mechanic })}
+              onPress={() =>
+                navigation.navigate("Chat", {
+                  requestId,
+                  mechanic,
+                  issue: serviceType,
+                  otherParty: {
+                    id: mechanic?.id,
+                    name: mechanic?.name || "Mechanic",
+                    subtitle: serviceType,
+                  },
+                })
+              }
             >
               <Text style={styles.chatButtonText}>💬 Chat with Mechanic</Text>
             </TouchableOpacity>
-            {(status === "Found" || status === "OnTheWay") && (
+            {(status === "OnTheWay" || status === "MechanicArrived" || mechanicArrived) && !driverArrived && (
               <TouchableOpacity
-                style={styles.arrivedButton}
+                style={[
+                  styles.arrivedButton,
+                  (mechanicArrived || status === "MechanicArrived") && styles.arrivedButtonUrgent,
+                ]}
                 onPress={handleConfirmMechanicArrived}
               >
-                <Text style={styles.arrivedButtonText}>
-                  📍 Mechanic Has Arrived
+                <Text
+                  style={[
+                    styles.arrivedButtonText,
+                    (mechanicArrived || status === "MechanicArrived") && styles.arrivedButtonTextUrgent,
+                  ]}
+                >
+                  {mechanicArrived || status === "MechanicArrived"
+                    ? "✅ Confirm Mechanic Has Arrived"
+                    : "📍 Confirm Mechanic Has Arrived"}
                 </Text>
               </TouchableOpacity>
             )}
             {status === "Arrived" && (
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={handleConfirmServiceComplete}
-              >
-                <Text style={styles.confirmButtonText}>
-                  ✅ Confirm Service Completed
+              <View style={styles.waitingCard}>
+                <Text style={styles.waitingTitle}>Service in progress</Text>
+                <Text style={styles.waitingSubtitle}>
+                  You'll receive a notification when the mechanic marks the service complete.
                 </Text>
-              </TouchableOpacity>
+              </View>
             )}
+          </View>
+        )}
+
+        {status === "AwaitingPayment" && (
+          <View style={styles.actions}>
             <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={handleCancelRequest}
+              style={styles.confirmButton}
+              onPress={handleProceedToPayment}
             >
-              <Text style={styles.cancelButtonText}>Cancel Request</Text>
+              <Text style={styles.confirmButtonText}>
+                💳 Proceed to Payment (GHS {serviceAmount ?? 0})
+              </Text>
             </TouchableOpacity>
           </View>
         )}
       </ScrollView>
+
+      {needsDriverArrivalConfirm && (
+        <View style={styles.stickyFooter}>
+          <Text style={styles.stickyFooterHint}>
+            {mechanicArrived || status === "MechanicArrived"
+              ? `${mechanicName} is waiting for your confirmation`
+              : `${mechanicName} is on the way`}
+          </Text>
+          <TouchableOpacity
+            style={styles.stickyConfirmButton}
+            onPress={handleConfirmMechanicArrived}
+          >
+            <Text style={styles.stickyConfirmButtonText}>
+              ✅ Confirm Mechanic Has Arrived
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -590,6 +890,72 @@ const styles = StyleSheet.create({
     textAlign: "center",
     flexWrap: "wrap",
     paddingHorizontal: 8,
+  },
+  promptBanner: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#BFDBFE",
+  },
+  promptBannerUrgent: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: "#EDE9FE",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#C4B5FD",
+  },
+  promptBannerTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginBottom: 6,
+  },
+  promptBannerText: {
+    fontSize: 14,
+    color: "#374151",
+    lineHeight: 20,
+  },
+  scrollWithFooter: {
+    paddingBottom: 120,
+  },
+  stickyFooter: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#fff",
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  stickyFooterHint: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  stickyConfirmButton: {
+    backgroundColor: "#7C3AED",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  stickyConfirmButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
   mapContainer: {
     marginHorizontal: 24,
@@ -775,11 +1141,17 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#7C3AED",
   },
+  arrivedButtonUrgent: {
+    backgroundColor: "#7C3AED",
+  },
   arrivedButtonText: {
     color: "#6D28D9",
     fontSize: 16,
     fontWeight: "bold",
     textAlign: "center",
+  },
+  arrivedButtonTextUrgent: {
+    color: "#fff",
   },
   confirmButton: {
     backgroundColor: "#DCFCE7",

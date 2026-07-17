@@ -2,77 +2,119 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  sendEmailVerification,
-  sendPasswordResetEmail,
   reload,
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
+import api from "./api";
+import { requestOtp, formatApiError } from "./otpService";
+
+function normalizeEmail(email) {
+  return email.trim().toLowerCase();
+}
 
 export const registerUser = async (name, email, phone, password, role) => {
+  const normalizedEmail = normalizeEmail(email);
+
   const userCredential = await createUserWithEmailAndPassword(
     auth,
-    email,
+    normalizedEmail,
     password,
   );
   const user = userCredential.user;
 
-  await sendEmailVerification(user);
-
   await setDoc(doc(db, "users", user.uid), {
     id: user.uid,
     name,
-    email,
+    email: normalizedEmail,
     phone,
     role,
+    emailVerified: false,
     createdAt: new Date().toISOString(),
   });
 
-  return {
-    success: true,
-    user: { id: user.uid, name, email, phone, role },
-    message:
-      "Account created! Please check your email to verify your account before logging in.",
-  };
+  try {
+    const otpResult = await requestOtp(normalizedEmail, "register", user.uid);
+    return {
+      success: true,
+      otpSent: otpResult.emailed,
+      devOtp: otpResult.devOtp,
+      user: {
+        id: user.uid,
+        name,
+        email: normalizedEmail,
+        phone,
+        role,
+      },
+      message: "Account created. Check your email for the verification code.",
+    };
+  } catch (error) {
+    const otpError = formatApiError(error);
+    const wrapped = new Error(
+      `Account created, but we could not send the verification email. ${otpError}`,
+    );
+    wrapped.code = "otp/send-failed";
+    wrapped.uid = user.uid;
+    wrapped.email = normalizedEmail;
+    throw wrapped;
+  }
+};
+
+export const markEmailVerified = async (uid) => {
+  await updateDoc(doc(db, "users", uid), { emailVerified: true });
 };
 
 export const loginUser = async (email, password) => {
+  const normalizedEmail = normalizeEmail(email);
+
   const userCredential = await signInWithEmailAndPassword(
     auth,
-    email,
+    normalizedEmail,
     password,
   );
   const user = userCredential.user;
 
   await reload(user);
 
-  if (!user.emailVerified) {
-    await signOut(auth);
+  const userDoc = await getDoc(doc(db, "users", user.uid));
+  const userData = userDoc.data();
+
+  const isVerified = userData?.emailVerified || user.emailVerified;
+
+  if (!isVerified) {
     throw {
       code: "auth/email-not-verified",
       message:
-        "Please verify your email before logging in. Check your inbox for the verification link.",
+        "Please verify your email before logging in. We can send you a new code.",
+      email: normalizedEmail,
+      uid: user.uid,
     };
   }
-
-  const userDoc = await getDoc(doc(db, "users", user.uid));
-  const userData = userDoc.data();
 
   return { success: true, user: userData };
 };
 
-export const resetPassword = async (email) => {
-  await sendPasswordResetEmail(auth, email);
-  return { success: true };
+export const sendPasswordResetOTP = async (email) => {
+  const normalizedEmail = normalizeEmail(email);
+  const otpResult = await requestOtp(normalizedEmail, "reset");
+  return {
+    success: true,
+    emailed: otpResult.emailed,
+    devOtp: otpResult.devOtp,
+  };
 };
 
-export const resendVerificationEmail = async () => {
-  const user = auth.currentUser;
-  if (user) {
-    await sendEmailVerification(user);
-    return { success: true };
-  }
-  throw new Error("No user found");
+export const resetPasswordWithOTP = async (email, otp, newPassword) => {
+  const response = await api.post(
+    "/api/otp/reset-password",
+    {
+      email: normalizeEmail(email),
+      otp: String(otp).trim(),
+      newPassword,
+    },
+    { timeout: 20000 },
+  );
+  return response.data;
 };
 
 export const logoutUser = async () => {

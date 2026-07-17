@@ -16,6 +16,7 @@ import Button from "../components/common/Button";
 import ScreenHeader from "../components/layout/ScreenHeader";
 import RoleSelector from "../components/auth/RoleSelector";
 import { registerUser } from "../services/authService";
+import { requestOtp, formatApiError } from "../services/otpService";
 import { colors } from "../constants/theme";
 
 export default function RegisterScreen({ navigation }) {
@@ -39,19 +40,44 @@ export default function RegisterScreen({ navigation }) {
 
     setLoading(true);
     try {
-      await registerUser(name, email, phone, password, role);
+      const result = await registerUser(name, email, phone, password, role);
+      navigation.navigate("VerifyOTP", {
+        email: result.user.email,
+        uid: result.user.id,
+        purpose: "register",
+      });
+
       Alert.alert(
-        "Account Created! 🎉",
-        "Please check your email and click the verification link before logging in.",
-        [{ text: "Go to Login", onPress: () => navigation.navigate("Login") }],
+        "Check Your Email",
+        `We sent a 6-digit verification code to ${result.user.email}. Enter it on the next screen to activate your account.`,
       );
+
+      if (__DEV__ && result.devOtp) {
+        Alert.alert("Development", `Verification code: ${result.devOtp}`);
+      }
     } catch (error) {
+      if (error.code === "otp/send-failed") {
+        Alert.alert("Verification Email", error.message, [
+          {
+            text: "Enter Code",
+            onPress: () =>
+              navigation.navigate("VerifyOTP", {
+                email: error.email,
+                uid: error.uid,
+                purpose: "register",
+              }),
+          },
+        ]);
+        return;
+      }
       if (error.code === "auth/email-already-in-use") {
         Alert.alert("Error", "This email is already registered.");
       } else if (error.code === "auth/invalid-email") {
         Alert.alert("Error", "Please enter a valid email address.");
       } else if (error.code === "auth/weak-password") {
         Alert.alert("Error", "Password is too weak. Use at least 6 characters.");
+      } else if (error.response?.data?.error) {
+        Alert.alert("Error", error.response.data.error);
       } else {
         Alert.alert("Error", error.message || "Registration failed.");
       }
@@ -69,8 +95,8 @@ export default function RegisterScreen({ navigation }) {
       >
         <ScrollView showsVerticalScrollIndicator={false}>
           <ScreenHeader
-            title="Create Account 🙌"
-            subtitle="Join RescueLink today"
+            title="Create Account"
+            subtitle="Join RescueLink for fast roadside assistance"
             onBack={() => navigation.goBack()}
           />
 
@@ -107,7 +133,7 @@ export default function RegisterScreen({ navigation }) {
             />
 
             <Button
-              title="Create Account 🚀"
+              title="Create Account"
               onPress={handleRegister}
               loading={loading}
             />

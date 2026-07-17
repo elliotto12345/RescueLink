@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   StatusBar,
   ScrollView,
+  Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import ProtectedScreen from "../../navigation/ProtectedScreen";
@@ -16,6 +17,14 @@ import Card from "../../components/common/Card";
 import StatusBadge from "../../components/common/StatusBadge";
 import { useAuth } from "../../contexts/AuthContext";
 import { getServiceHistory } from "../../services/serviceHistory";
+import {
+  getActiveServiceRequest,
+  subscribeToServiceRequest,
+  clearActiveServiceRequest,
+  isActiveRequestStatus,
+} from "../../services/requestService";
+import { REQUEST_STATUS } from "../../constants/requestStatus";
+import { connectSocket } from "../../services/socket";
 import { DRIVER_NAV } from "../../constants/navigation";
 import { colors, shadow, radius } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
@@ -26,15 +35,140 @@ const QUICK_ACTIONS = [
   { emoji: "🚨", label: "Emergency", route: "EmergencyCenter" },
 ];
 
+function getActiveRequestMessage(request) {
+  if (!request) return null;
+
+  if (request.mechanicArrived && !request.driverArrived) {
+    return {
+      title: "Mechanic Has Arrived",
+      subtitle: `${request.mechanicName || "Your mechanic"} is waiting for you to confirm arrival.`,
+      urgent: true,
+    };
+  }
+
+  if (request.status === REQUEST_STATUS.ON_THE_WAY) {
+    return {
+      title: "Mechanic On The Way",
+      subtitle: `${request.mechanicName || "Your mechanic"} is heading to your location.`,
+      urgent: false,
+    };
+  }
+
+  if (request.status === REQUEST_STATUS.ARRIVED && request.mechanicArrived) {
+    return {
+      title: "Confirm Arrival",
+      subtitle: "Your mechanic arrived. Confirm to continue with service.",
+      urgent: true,
+    };
+  }
+
+  if (request.status === REQUEST_STATUS.SERVICE_COMPLETE) {
+    return {
+      title: "Service Completed",
+      subtitle: `Pay GHS ${request.amount ?? 0} to complete your request.`,
+      urgent: true,
+    };
+  }
+
+  if (request.status === REQUEST_STATUS.ACCEPTED) {
+    return {
+      title: "Mechanic Accepted",
+      subtitle: `${request.mechanicName || "Your mechanic"} accepted your request.`,
+      urgent: false,
+    };
+  }
+
+  if (request.status === REQUEST_STATUS.PENDING) {
+    return {
+      title: "Waiting for Mechanic",
+      subtitle: "Your request is pending acceptance.",
+      urgent: false,
+    };
+  }
+
+  return null;
+}
+
 function DashboardContent({ navigation }) {
   const { user } = useAuth();
   const [requests, setRequests] = useState([]);
+  const [activeRequestMeta, setActiveRequestMeta] = useState(null);
+  const [liveRequest, setLiveRequest] = useState(null);
+  const lastLiveRequestRef = useRef(null);
 
   useFocusEffect(
     useCallback(() => {
       getServiceHistory().then(setRequests);
-    }, []),
+      getActiveServiceRequest().then(setActiveRequestMeta);
+      if (user?.id) {
+        connectSocket(user.id, user.role || ROLES.DRIVER);
+      }
+    }, [user?.id, user?.role]),
   );
+
+  useEffect(() => {
+    if (!activeRequestMeta?.requestId) return;
+
+    const unsubscribe = subscribeToServiceRequest(
+      activeRequestMeta.requestId,
+      (request) => {
+        const prev = lastLiveRequestRef.current;
+        lastLiveRequestRef.current = request;
+
+        if (!isActiveRequestStatus(request.status)) {
+          setLiveRequest(null);
+          clearActiveServiceRequest();
+          return;
+        }
+
+        setLiveRequest(request);
+
+        if (!prev) return;
+
+        const mechanicName = request.mechanicName || activeRequestMeta?.mechanic?.name || "Your mechanic";
+
+        if (
+          request.status === REQUEST_STATUS.ON_THE_WAY &&
+          prev.status !== REQUEST_STATUS.ON_THE_WAY
+        ) {
+          Alert.alert("Mechanic On The Way", `${mechanicName} is heading to your location.`);
+        }
+
+        if (request.mechanicArrived && !prev.mechanicArrived) {
+          Alert.alert(
+            "Mechanic Has Arrived",
+            `${mechanicName} confirmed arrival. Open your active request to confirm.`,
+          );
+        }
+
+        if (
+          request.status === REQUEST_STATUS.SERVICE_COMPLETE &&
+          prev.status !== REQUEST_STATUS.SERVICE_COMPLETE
+        ) {
+          Alert.alert(
+            "Service Completed",
+            `${mechanicName} completed the service. Pay GHS ${request.amount ?? 0}.`,
+          );
+        }
+      },
+    );
+
+    return unsubscribe;
+  }, [activeRequestMeta?.requestId]);
+
+  const activeMessage = getActiveRequestMessage(liveRequest);
+  const showActiveBanner = activeMessage && activeRequestMeta;
+
+  const openActiveRequest = () => {
+    if (!activeRequestMeta) return;
+
+    navigation.navigate("TrackMechanic", {
+      mechanic: activeRequestMeta.mechanic,
+      service: activeRequestMeta.service,
+      requestId: activeRequestMeta.requestId,
+      waitingForAcceptance: liveRequest?.status === REQUEST_STATUS.PENDING,
+    });
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,6 +190,20 @@ function DashboardContent({ navigation }) {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {showActiveBanner && (
+          <TouchableOpacity
+            style={[
+              styles.activeRequestBanner,
+              activeMessage.urgent && styles.activeRequestBannerUrgent,
+            ]}
+            onPress={openActiveRequest}
+          >
+            <Text style={styles.activeRequestTitle}>{activeMessage.title}</Text>
+            <Text style={styles.activeRequestSubtitle}>{activeMessage.subtitle}</Text>
+            <Text style={styles.activeRequestAction}>Tap to view active request →</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.sosButton}
@@ -167,6 +315,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   profileInitial: { color: colors.white, fontSize: 18, fontWeight: "bold" },
+  activeRequestBanner: {
+    marginHorizontal: 24,
+    marginBottom: 8,
+    backgroundColor: "#EFF6FF",
+    borderRadius: radius.lg,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#BFDBFE",
+  },
+  activeRequestBannerUrgent: {
+    backgroundColor: "#EDE9FE",
+    borderColor: "#C4B5FD",
+  },
+  activeRequestTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: colors.text,
+    marginBottom: 4,
+  },
+  activeRequestSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  activeRequestAction: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: "700",
+    marginTop: 10,
+  },
   sosButton: {
     margin: 24,
     backgroundColor: colors.primary,

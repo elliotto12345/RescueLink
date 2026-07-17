@@ -2,7 +2,10 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const socketIO = require("socket.io");
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
+
+const { getFirebaseAdmin } = require("./utils/firebaseAdmin");
+const { verifyEmailTransport } = require("./utils/mailer");
 
 const app = express();
 const server = http.createServer(app);
@@ -57,6 +60,30 @@ io.on("connection", (socket) => {
     notifyUser(data.userId, "requestAccepted", data);
   });
 
+  // Mechanic confirms they are on the way — notify the driver
+  socket.on("mechanicOnTheWay", (data) => {
+    console.log("Mechanic on the way:", data);
+    notifyUser(data.userId, "mechanicOnTheWay", data);
+  });
+
+  // Mechanic confirms arrival at the driver location
+  socket.on("mechanicArrived", (data) => {
+    console.log("Mechanic arrived:", data);
+    notifyUser(data.userId, "mechanicArrived", data);
+  });
+
+  // Driver confirms the mechanic has arrived
+  socket.on("driverArrived", (data) => {
+    console.log("Driver confirmed arrival:", data);
+    notifyUser(data.mechanicId, "driverArrived", data);
+  });
+
+  // Mechanic marks service complete with charge — notify driver to pay
+  socket.on("serviceComplete", (data) => {
+    console.log("Service complete:", data);
+    notifyUser(data.userId, "serviceComplete", data);
+  });
+
   // Mechanic declines request — notify the driver only
   socket.on("declineRequest", (data) => {
     console.log("Request declined:", data);
@@ -75,10 +102,35 @@ io.on("connection", (socket) => {
     io.emit("statusUpdated", data);
   });
 
-  // Chat message
+  // Chat message — deliver to recipient in real time
   socket.on("sendMessage", (data) => {
     console.log("Message received:", data);
-    io.emit("receiveMessage", data);
+    const targetId = data.receiverId || data.recipientId;
+    if (targetId) {
+      notifyUser(targetId, "receiveMessage", data);
+    } else if (data.mechanicId && data.senderRole === "driver") {
+      notifyUser(data.mechanicId, "receiveMessage", data);
+    } else if (data.userId && data.senderRole === "provider") {
+      notifyUser(data.userId, "receiveMessage", data);
+    }
+  });
+
+  socket.on("typingStart", (data) => {
+    if (data.recipientId) {
+      notifyUser(data.recipientId, "typingStart", data);
+    }
+  });
+
+  socket.on("typingStop", (data) => {
+    if (data.recipientId) {
+      notifyUser(data.recipientId, "typingStop", data);
+    }
+  });
+
+  socket.on("messagesRead", (data) => {
+    if (data.notifyUserId) {
+      notifyUser(data.notifyUserId, "messagesRead", data);
+    }
   });
 
   // New request created — notify the assigned mechanic only
@@ -105,6 +157,22 @@ app.use("/api/mechanics", require("./routes/mechanics"));
 app.use("/api/otp", require("./routes/otp"));
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT} `);
+server.listen(PORT, async () => {
+  console.log(`Server running on port ${PORT}`);
+
+  const firebaseReady = Boolean(getFirebaseAdmin());
+  console.log(
+    firebaseReady
+      ? "Firebase Admin: ready (password reset + OTP persistence enabled)"
+      : "Firebase Admin: not configured — set FIREBASE_SERVICE_ACCOUNT for password reset",
+  );
+
+  const emailStatus = await verifyEmailTransport();
+  if (emailStatus.ok) {
+    console.log(`OTP email: ready via ${emailStatus.from}`);
+  } else if (process.env.NODE_ENV !== "production") {
+    console.log(`OTP email: dev mode — codes logged to console (${emailStatus.reason})`);
+  } else {
+    console.warn(`OTP email: not ready — ${emailStatus.reason}`);
+  }
 });

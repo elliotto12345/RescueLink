@@ -7,6 +7,8 @@ import HomeScreen from "../pages/HomeScreen";
 import LoginScreen from "../pages/LoginScreen";
 import RegisterScreen from "../pages/RegisterScreen";
 import ForgotPasswordScreen from "../pages/ForgotPasswordScreen";
+import VerifyOTPScreen from "../pages/VerifyOTPScreen";
+import NewPasswordScreen from "../pages/NewPasswordScreen";
 
 // Driver
 import UserDashboard from "../pages/driver/UserDashboard";
@@ -21,6 +23,7 @@ import AIAssistantScreen from "../pages/driver/AIAssistantScreen";
 // Mechanic
 import MechanicDashboard from "../pages/mechanic/MechanicDashboard";
 import JobScreen from "../pages/mechanic/JobScreen";
+import PerformanceInsightsScreen from "../pages/mechanic/PerformanceInsightsScreen";
 
 // Admin
 import AdminDashboard from "../pages/admin/AdminDashboard";
@@ -43,6 +46,8 @@ export default function AppNavigator() {
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} />
+          <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
 
           {/* Driver routes */}
           <Stack.Screen name="UserDashboard" component={UserDashboard} />
@@ -55,6 +60,7 @@ export default function AppNavigator() {
           {/* Mechanic routes */}
           <Stack.Screen name="MechanicDashboard" component={MechanicDashboard} />
           <Stack.Screen name="JobScreen" component={JobScreen} />
+          <Stack.Screen name="PerformanceInsights" component={PerformanceInsightsScreen} />
 
           {/* Admin routes */}
           <Stack.Screen name="AdminDashboard" component={AdminDashboard} />

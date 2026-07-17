@@ -16,6 +16,8 @@ import StarRating from "../../components/common/StarRating";
 import Input from "../../components/common/Input";
 import SectionTitle from "../../components/layout/SectionTitle";
 import { markServiceRated } from "../../services/serviceHistory";
+import { submitMechanicRating } from "../../services/ratingService";
+import { getUser } from "../../services/storage";
 import { colors } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
 
@@ -23,6 +25,8 @@ function RatingsContent({ navigation, route }) {
   const providerName = route?.params?.providerName || "Provider";
   const fromServiceFlow = route?.params?.fromServiceFlow;
   const requestId = route?.params?.requestId;
+  const mechanicId = route?.params?.mechanicId;
+  const firestoreRequestId = route?.params?.firestoreRequestId;
   const serviceType =
     route?.params?.service && route?.params?.date
       ? `${route.params.service} · ${route.params.date}`
@@ -54,8 +58,23 @@ function RatingsContent({ navigation, route }) {
       Alert.alert("Error", "Please select a star rating");
       return;
     }
-    if (requestId) {
-      await markServiceRated(requestId);
+    try {
+      const user = await getUser();
+      if (mechanicId && firestoreRequestId) {
+        await submitMechanicRating({
+          mechanicId,
+          requestId: firestoreRequestId,
+          userId: user?.id,
+          userName: user?.name,
+          rating,
+          feedback,
+        });
+      }
+      if (requestId) {
+        await markServiceRated(requestId);
+      }
+    } catch (error) {
+      console.error("Could not submit rating:", error);
     }
     Alert.alert("Thank You!", "Your review has been submitted.", [
       { text: "OK", onPress: finishRating },

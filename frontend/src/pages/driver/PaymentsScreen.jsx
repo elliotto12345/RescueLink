@@ -15,6 +15,7 @@ import Card, { CardTitle, CardSubtitle } from "../../components/common/Card";
 import Button from "../../components/common/Button";
 import SectionTitle from "../../components/layout/SectionTitle";
 import { addServiceHistory } from "../../services/serviceHistory";
+import { clearActiveServiceRequest, markRequestPaid } from "../../services/requestService";
 import { colors, radius } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
 
@@ -32,6 +33,8 @@ function PaymentsContent({ navigation, route }) {
   const provider = route?.params?.provider || CURRENT_SERVICE.provider;
   const amount = route?.params?.amount ?? CURRENT_SERVICE.amount;
   const currency = route?.params?.currency || CURRENT_SERVICE.currency;
+  const firestoreRequestId = route?.params?.requestId;
+  const mechanicId = route?.params?.mechanicId;
 
   const handlePay = () => {
     Alert.alert(
@@ -49,20 +52,26 @@ function PaymentsContent({ navigation, route }) {
                   day: "numeric",
                   year: "numeric",
                 });
-                const requestId = Date.now();
+                const historyId = firestoreRequestId || String(Date.now());
+                if (firestoreRequestId) {
+                  await markRequestPaid(firestoreRequestId, amount);
+                }
                 await addServiceHistory({
-                  id: requestId,
+                  id: historyId,
                   issue: service,
                   mechanic: provider,
                   status: "Completed",
                   date,
                   rated: false,
                 });
+                await clearActiveServiceRequest();
                 navigation.navigate("Ratings", {
                   providerName: provider,
+                  mechanicId,
                   service,
                   date,
-                  requestId,
+                  requestId: historyId,
+                  firestoreRequestId,
                   fromServiceFlow: true,
                 });
               },
