@@ -2,7 +2,7 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const socketIO = require("socket.io");
-require("dotenv").config({ quiet: true });
+require("dotenv").config({ quiet: true, override: false });
 
 const { getFirebaseAdmin } = require("./utils/firebaseAdmin");
 const { verifyEmailTransport } = require("./utils/mailer");
@@ -171,7 +171,9 @@ server.listen(PORT, async () => {
   if (emailStatus.ok) {
     console.log(`OTP email: ready via ${emailStatus.from}`);
   } else if (process.env.NODE_ENV !== "production") {
-    console.log(`OTP email: dev mode — codes logged to console (${emailStatus.reason})`);
+    console.log(
+      `OTP email: dev mode — codes logged to console (${emailStatus.reason})`,
+    );
   } else {
     console.warn(`OTP email: not ready — ${emailStatus.reason}`);
   }

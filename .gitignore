@@ -40,3 +40,4 @@ frontend/.env
 # generated native folders
 /ios
 /android
+backend/.env

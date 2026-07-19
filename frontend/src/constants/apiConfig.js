@@ -1,11 +1,9 @@
 import { Platform } from "react-native";
 
-/** Update after Railway deploy, or set EXPO_PUBLIC_API_URL in frontend/.env */
-export const RAILWAY_URL =
-  "https://rescuelink-backend-production.up.railway.app";
+export const RENDER_URL = "https://rescuelink-backend-oc2e.onrender.com";
 
-function useRailwayInDev() {
-  const flag = process.env.EXPO_PUBLIC_USE_RAILWAY;
+function useRenderInDev() {
+  const flag = process.env.EXPO_PUBLIC_USE_RENDER;
   return flag === "1" || flag === "true";
 }
 
@@ -14,11 +12,11 @@ export function getApiBaseUrl() {
     return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
   }
 
-  if (typeof __DEV__ !== "undefined" && __DEV__ && !useRailwayInDev()) {
+  if (typeof __DEV__ !== "undefined" && __DEV__ && !useRenderInDev()) {
     return Platform.OS === "android"
       ? "http://10.0.2.2:5000"
       : "http://localhost:5000";
   }
 
-  return RAILWAY_URL;
+  return RENDER_URL;
 }
