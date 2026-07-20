@@ -14,7 +14,7 @@ import {
 import { useState, useRef } from "react";
 import axios from "axios";
 
-const GROQ_API_KEY = "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";
+const GROQ_API_KEY = "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";
 export default function AIAssistantScreen({ navigation }) {
   const [messages, setMessages] = useState([
     {

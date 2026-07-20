@@ -26,7 +26,7 @@ export const sendOTP = (email, purpose = "register", uid = null) =>
       purpose,
       ...(uid ? { uid } : {}),
     },
-    { timeout: 20000 },
+    { timeout: 60000 }, // increased to 60 seconds
   );
 
 export const verifyOTP = (email, otp, purpose = "register", uid = null) =>

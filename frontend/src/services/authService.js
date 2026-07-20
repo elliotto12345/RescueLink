@@ -22,6 +22,7 @@ export const registerUser = async (name, email, phone, password, role) => {
     password,
   );
   const user = userCredential.user;
+  console.log("Firebase UID:", user.uid); // Add this
 
   await setDoc(doc(db, "users", user.uid), {
     id: user.uid,
@@ -34,6 +35,7 @@ export const registerUser = async (name, email, phone, password, role) => {
   });
 
   try {
+    console.log("Sending OTP to:", normalizedEmail, "UID:", user.uid); // Add this
     const otpResult = await requestOtp(normalizedEmail, "register", user.uid);
     return {
       success: true,
@@ -49,6 +51,7 @@ export const registerUser = async (name, email, phone, password, role) => {
       message: "Account created. Check your email for the verification code.",
     };
   } catch (error) {
+    console.log("OTP error:", error.message); // Add this
     const otpError = formatApiError(error);
     const wrapped = new Error(
       `Account created, but we could not send the verification email. ${otpError}`,
@@ -59,7 +62,6 @@ export const registerUser = async (name, email, phone, password, role) => {
     throw wrapped;
   }
 };
-
 export const markEmailVerified = async (uid) => {
   await updateDoc(doc(db, "users", uid), { emailVerified: true });
 };

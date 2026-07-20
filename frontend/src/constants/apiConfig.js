@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 
-export const RENDER_URL = "https://rescuelink-backend-oc2e.onrender.com";
+export const RENDER_URL = "https://rescuelink-backend-0q2e.onrender.com";
 
 function useRenderInDev() {
   const flag = process.env.EXPO_PUBLIC_USE_RENDER;

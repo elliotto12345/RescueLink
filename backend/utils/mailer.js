@@ -14,11 +14,11 @@ function createTransporter() {
 
   cachedTransporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    connectionTimeout: 20000,
-    greetingTimeout: 20000,
-    socketTimeout: 30000,
+    port: 465,
+    secure: true,
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 45000,
     auth: {
       user: process.env.GMAIL_USER,
       pass: process.env.GMAIL_PASSWORD,
@@ -27,7 +27,6 @@ function createTransporter() {
 
   return cachedTransporter;
 }
-
 function mapSmtpError(error) {
   const response = String(error.response || "");
   const code = error.code || "";
