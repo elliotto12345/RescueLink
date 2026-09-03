@@ -3,7 +3,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Appearance,
   StatusBar,
   TextInput,
   ScrollView,
@@ -15,11 +14,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useRef } from "react";
 import axios from "axios";
 
-const GROQ_API_KEY = "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";
+// Paste your key here inside the quotes
+const OPENROUTER_API_KEY =
+  "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";
+
 export default function AIAssistantScreen({ navigation }) {
   const [messages, setMessages] = useState([
     {
-      id: 1,
+      id: "ai-welcome",
       sender: "ai",
       message:
         "Hi! I am your RescueLink AI Assistant 🤖\n\nDescribe your vehicle issue and I will help you understand what might be wrong and what to do while you wait for your mechanic.",
@@ -37,7 +39,7 @@ export default function AIAssistantScreen({ navigation }) {
     if (!newMessage.trim()) return;
 
     const userMsg = {
-      id: messages.length + 1,
+      id: `user-${Date.now()}`,
       sender: "user",
       message: newMessage.trim(),
       time: new Date().toLocaleTimeString([], {
@@ -46,42 +48,54 @@ export default function AIAssistantScreen({ navigation }) {
       }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     const currentMessage = newMessage.trim();
     setNewMessage("");
     setLoading(true);
 
+    // 1. Define conversationHistory BEFORE calling the API
+    const conversationHistory = updatedMessages
+      .filter((m) => m.sender === "user" || m.sender === "ai")
+      .map((m) => ({
+        role: m.sender === "user" ? "user" : "assistant",
+        content: m.message,
+      }));
+
     try {
       const response = await axios.post(
-        "https://api.groq.com/openai/v1/chat/completions",
+        "https://openrouter.ai/api/v1/chat/completions",
         {
-          model: "llama-3.1-8b-instant",
+          model: "openrouter/free",
           messages: [
             {
               role: "system",
               content:
-                "You are RescueLink AI Assistant, an expert vehicle breakdown assistant. Your job is to help stranded drivers understand their vehicle issues and provide clear simple guidance while they wait for a mechanic. Keep responses short and clear. Always reassure the user. Suggest safety precautions when needed. Never recommend dangerous DIY fixes. Always remind them a verified mechanic is on the way.",
+                "You are RescueLink AI Assistant, an expert vehicle roadside assistant. Answer directly, warmly, and naturally like ChatGPT. If greeted, reply with a short friendly greeting. For car breakdown problems, explain likely causes clearly, give immediate safety precautions, never recommend dangerous DIY work, and reassure them that a verified mechanic is on the way. Do not output any thought processes, analysis, or scratchpad.",
             },
-            {
-              role: "user",
-              content: currentMessage,
-            },
+            ...conversationHistory,
           ],
-          max_tokens: 500,
+          max_tokens: 350,
         },
         {
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${GROQ_API_KEY}`,
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "HTTP-Referer": "https://rescuelink.app",
+            "X-Title": "RescueLink",
           },
-          timeout: 30000,
+          timeout: 25000,
         },
       );
 
+      const replyText =
+        response.data.choices?.[0]?.message?.content?.trim() ||
+        "I'm here to help. What seems to be the issue with your vehicle?";
+
       const aiReply = {
-        id: messages.length + 2,
+        id: `ai-${Date.now()}`,
         sender: "ai",
-        message: response.data.choices[0].message.content,
+        message: replyText,
         time: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -90,14 +104,15 @@ export default function AIAssistantScreen({ navigation }) {
 
       setMessages((prev) => [...prev, aiReply]);
     } catch (error) {
-      console.log("Full error:", JSON.stringify(error.response?.data));
-      console.log("Status:", error.response?.status);
-      console.log("Message:", error.message);
+      console.log("Error details:", error.response?.data || error.message);
       const errorMsg = {
-        id: messages.length + 2,
+        id: `err-${Date.now()}`,
         sender: "ai",
         message:
-          "Error: " + (error.response?.data?.error?.message || error.message),
+          "Error: " +
+          (error.response?.data?.error?.message ||
+            error.message ||
+            "Unable to connect."),
         time: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -108,12 +123,10 @@ export default function AIAssistantScreen({ navigation }) {
       setLoading(false);
     }
   };
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>← Back</Text>
@@ -134,7 +147,6 @@ export default function AIAssistantScreen({ navigation }) {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* Messages */}
         <ScrollView
           ref={scrollViewRef}
           style={styles.messagesList}
@@ -202,7 +214,6 @@ export default function AIAssistantScreen({ navigation }) {
           )}
         </ScrollView>
 
-        {/* Quick Prompts */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -226,7 +237,6 @@ export default function AIAssistantScreen({ navigation }) {
           ))}
         </ScrollView>
 
-        {/* Input */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
