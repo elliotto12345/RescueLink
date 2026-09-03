@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, radius } from "../../constants/theme";
 import { ROLES, ROLE_LABELS } from "../../constants/roles";
 
@@ -22,7 +23,10 @@ export default function RoleSelector({ value, onChange }) {
                 {role === ROLES.DRIVER ? "🚗" : "🔧"}
               </Text>
               <Text
-                style={[styles.optionText, selected && styles.optionTextSelected]}
+                style={[
+                  styles.optionText,
+                  selected && styles.optionTextSelected,
+                ]}
               >
                 {ROLE_LABELS[role]}
               </Text>

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import ScreenHeader from "../components/layout/ScreenHeader";
@@ -46,7 +47,11 @@ export default function LoginScreen({ navigation }) {
             text: "Send Code",
             onPress: async () => {
               try {
-                const result = await requestOtp(error.email, "register", error.uid);
+                const result = await requestOtp(
+                  error.email,
+                  "register",
+                  error.uid,
+                );
                 navigation.navigate("VerifyOTP", {
                   email: error.email,
                   uid: error.uid,
@@ -54,7 +59,10 @@ export default function LoginScreen({ navigation }) {
                 });
 
                 if (__DEV__ && result.devOtp) {
-                  Alert.alert("Development", `Verification code: ${result.devOtp}`);
+                  Alert.alert(
+                    "Development",
+                    `Verification code: ${result.devOtp}`,
+                  );
                 }
               } catch (sendError) {
                 Alert.alert("Could Not Send Code", formatApiError(sendError));

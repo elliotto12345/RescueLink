@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import ScreenHeader from "../components/layout/ScreenHeader";

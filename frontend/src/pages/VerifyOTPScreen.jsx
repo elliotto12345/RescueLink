@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   KeyboardAvoidingView,
@@ -11,14 +11,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import ScreenHeader from "../components/layout/ScreenHeader";
 import { requestOtp, confirmOtp, formatApiError } from "../services/otpService";
-import {
-  fetchUserProfile,
-  markEmailVerified,
-} from "../services/authService";
+import { fetchUserProfile, markEmailVerified } from "../services/authService";
 import { useAuth } from "../contexts/AuthContext";
 import { getDashboardForRole } from "../constants/roles";
 import { colors, radius } from "../constants/theme";
@@ -67,7 +65,10 @@ export default function VerifyOTPScreen({ navigation, route }) {
     if (!email) return;
 
     if (otp.length !== 6) {
-      Alert.alert("Invalid Code", "Please enter the 6-digit code from your email.");
+      Alert.alert(
+        "Invalid Code",
+        "Please enter the 6-digit code from your email.",
+      );
       return;
     }
 
@@ -175,7 +176,8 @@ export default function VerifyOTPScreen({ navigation, route }) {
             <View style={styles.noticeCard}>
               <Text style={styles.noticeTitle}>Didn't receive the email?</Text>
               <Text style={styles.noticeText}>
-                Check your spam or promotions folder. Codes expire after 5 minutes.
+                Check your spam or promotions folder. Codes expire after 5
+                minutes.
               </Text>
             </View>
 

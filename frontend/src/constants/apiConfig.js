@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export const RENDER_URL = "https://rescuelink-backend-0q2e.onrender.com";
 

@@ -3,10 +3,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useState } from "react";
 
 const pendingMechanics = [];
@@ -120,34 +121,36 @@ export default function AdminDashboard({ navigation }) {
               <Text style={styles.emptyText}>No active requests.</Text>
             ) : (
               activeRequests.map((request) => (
-              <View key={request.id} style={styles.requestCard}>
-                <View style={styles.requestTop}>
-                  <View style={styles.requestLeft}>
-                    <Text style={styles.requestUser}>👤 {request.user}</Text>
-                    <Text style={styles.requestIssue}>🔧 {request.issue}</Text>
-                    <Text style={styles.requestMechanic}>
-                      🛠️ {request.mechanic}
-                    </Text>
-                    <Text style={styles.requestTime}>🕐 {request.time}</Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: getStatusBg(request.status) },
-                    ]}
-                  >
-                    <Text
+                <View key={request.id} style={styles.requestCard}>
+                  <View style={styles.requestTop}>
+                    <View style={styles.requestLeft}>
+                      <Text style={styles.requestUser}>👤 {request.user}</Text>
+                      <Text style={styles.requestIssue}>
+                        🔧 {request.issue}
+                      </Text>
+                      <Text style={styles.requestMechanic}>
+                        🛠️ {request.mechanic}
+                      </Text>
+                      <Text style={styles.requestTime}>🕐 {request.time}</Text>
+                    </View>
+                    <View
                       style={[
-                        styles.statusText,
-                        { color: getStatusColor(request.status) },
+                        styles.statusBadge,
+                        { backgroundColor: getStatusBg(request.status) },
                       ]}
                     >
-                      {request.status}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.statusText,
+                          { color: getStatusColor(request.status) },
+                        ]}
+                      >
+                        {request.status}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))
+              ))
             )}
           </View>
         )}
@@ -160,39 +163,39 @@ export default function AdminDashboard({ navigation }) {
               <Text style={styles.emptyText}>No pending verifications.</Text>
             ) : (
               pendingMechanics.map((mechanic) => (
-              <View key={mechanic.id} style={styles.mechanicCard}>
-                <View style={styles.mechanicHeader}>
-                  <View style={styles.mechanicAvatar}>
-                    <Text style={styles.mechanicAvatarText}>
-                      {mechanic.name.charAt(0)}
-                    </Text>
+                <View key={mechanic.id} style={styles.mechanicCard}>
+                  <View style={styles.mechanicHeader}>
+                    <View style={styles.mechanicAvatar}>
+                      <Text style={styles.mechanicAvatarText}>
+                        {mechanic.name.charAt(0)}
+                      </Text>
+                    </View>
+                    <View style={styles.mechanicInfo}>
+                      <Text style={styles.mechanicName}>{mechanic.name}</Text>
+                      <Text style={styles.mechanicDetail}>
+                        📞 {mechanic.phone}
+                      </Text>
+                      <Text style={styles.mechanicDetail}>
+                        📍 {mechanic.location}
+                      </Text>
+                      <Text style={styles.mechanicDetail}>
+                        💼 {mechanic.experience} experience
+                      </Text>
+                      <Text style={styles.mechanicApplied}>
+                        Applied: {mechanic.applied}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.mechanicInfo}>
-                    <Text style={styles.mechanicName}>{mechanic.name}</Text>
-                    <Text style={styles.mechanicDetail}>
-                      📞 {mechanic.phone}
-                    </Text>
-                    <Text style={styles.mechanicDetail}>
-                      📍 {mechanic.location}
-                    </Text>
-                    <Text style={styles.mechanicDetail}>
-                      💼 {mechanic.experience} experience
-                    </Text>
-                    <Text style={styles.mechanicApplied}>
-                      Applied: {mechanic.applied}
-                    </Text>
+                  <View style={styles.verifyActions}>
+                    <TouchableOpacity style={styles.approveButton}>
+                      <Text style={styles.approveButtonText}>✅ Approve</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.rejectButton}>
+                      <Text style={styles.rejectButtonText}>❌ Reject</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-                <View style={styles.verifyActions}>
-                  <TouchableOpacity style={styles.approveButton}>
-                    <Text style={styles.approveButtonText}>✅ Approve</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.rejectButton}>
-                    <Text style={styles.rejectButtonText}>❌ Reject</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
+              ))
             )}
           </View>
         )}

@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   TextInput,
   ScrollView,
@@ -12,6 +12,7 @@ import {
   Alert,
   RefreshControl,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { getUser } from "../../services/storage";
 import { connectSocket, emitNewRequest } from "../../services/socket";
@@ -20,7 +21,10 @@ import {
   saveActiveServiceRequest,
 } from "../../services/requestService";
 import { fetchNearbyMechanicsWithStatus } from "../../services/mechanicService";
-import { ensureChatThread, buildConversationId } from "../../services/chatService";
+import {
+  ensureChatThread,
+  buildConversationId,
+} from "../../services/chatService";
 import {
   formatDistance,
   sortMechanicsByOnlineAndDistance,
@@ -240,8 +244,8 @@ export default function RequestHelpScreen({ navigation }) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>📍 Registered Mechanics</Text>
             <Text style={styles.sectionHint}>
-              Mechanics appear online when logged in with the app open.
-              Only online mechanics can be selected. Pull down to refresh.
+              Mechanics appear online when logged in with the app open. Only
+              online mechanics can be selected. Pull down to refresh.
             </Text>
 
             {mechanics.length === 0 ? (
@@ -257,11 +261,9 @@ export default function RequestHelpScreen({ navigation }) {
                 const isSelected = selectedMechanic?.id === mechanic.id;
                 const isOnline = mechanic.online;
                 const showOnlineHeader =
-                  isOnline &&
-                  (index === 0 || !mechanics[index - 1]?.online);
+                  isOnline && (index === 0 || !mechanics[index - 1]?.online);
                 const showOfflineHeader =
-                  !isOnline &&
-                  (index === 0 || mechanics[index - 1]?.online);
+                  !isOnline && (index === 0 || mechanics[index - 1]?.online);
 
                 return (
                   <View key={mechanic.id}>
@@ -293,12 +295,18 @@ export default function RequestHelpScreen({ navigation }) {
                           ⭐ {mechanic.rating ?? "—"} • {mechanic.jobs} jobs
                         </Text>
                         {mechanic.phone ? (
-                          <Text style={styles.mechanicSpecialty} numberOfLines={1}>
+                          <Text
+                            style={styles.mechanicSpecialty}
+                            numberOfLines={1}
+                          >
                             📞 {mechanic.phone}
                           </Text>
                         ) : null}
                         {mechanic.email ? (
-                          <Text style={styles.mechanicSpecialty} numberOfLines={1}>
+                          <Text
+                            style={styles.mechanicSpecialty}
+                            numberOfLines={1}
+                          >
                             ✉️ {mechanic.email}
                           </Text>
                         ) : null}

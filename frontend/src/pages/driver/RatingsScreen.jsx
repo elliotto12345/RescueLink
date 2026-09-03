@@ -3,11 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import ProtectedScreen from "../../navigation/ProtectedScreen";
 import ScreenHeader from "../../components/layout/ScreenHeader";
 import Card from "../../components/common/Card";
@@ -143,8 +144,18 @@ export default function RatingsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   rateCard: { margin: 24 },
-  providerName: { fontSize: 20, fontWeight: "bold", color: colors.text, flexWrap: "wrap" },
-  serviceType: { fontSize: 14, color: colors.textSecondary, marginTop: 4, flexWrap: "wrap" },
+  providerName: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: colors.text,
+    flexWrap: "wrap",
+  },
+  serviceType: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+    flexWrap: "wrap",
+  },
   stars: { alignItems: "center", marginVertical: 20 },
   reviews: { paddingHorizontal: 24, gap: 12 },
   reviewItem: { marginBottom: 0 },
@@ -154,8 +165,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  reviewUser: { fontSize: 15, fontWeight: "bold", color: colors.text, flexShrink: 1 },
-  reviewComment: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, flexWrap: "wrap" },
+  reviewUser: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: colors.text,
+    flexShrink: 1,
+  },
+  reviewComment: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    flexWrap: "wrap",
+  },
   reviewDate: { fontSize: 12, color: colors.textMuted, marginTop: 8 },
   emptyReviews: {
     fontSize: 14,

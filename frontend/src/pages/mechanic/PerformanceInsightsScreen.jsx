@@ -3,11 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   RefreshControl,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import ProtectedScreen from "../../navigation/ProtectedScreen";
 import ScreenHeader from "../../components/layout/ScreenHeader";
@@ -97,7 +98,9 @@ function PerformanceInsightsContent({ navigation }) {
           onBack={() => navigation.goBack()}
         />
         <View style={styles.loadingWrap}>
-          <Text style={styles.loadingText}>Gathering your service history...</Text>
+          <Text style={styles.loadingText}>
+            Gathering your service history...
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -105,8 +108,14 @@ function PerformanceInsightsContent({ navigation }) {
 
   const stats = report?.stats || {};
   const totalRequests = report?.activityTimeline?.length || 0;
-  const maxStatusCount = Math.max(...(report?.statusBreakdown?.map((s) => s.count) || [1]), 1);
-  const maxServiceCount = Math.max(...(report?.serviceBreakdown?.map((s) => s.count) || [1]), 1);
+  const maxStatusCount = Math.max(
+    ...(report?.statusBreakdown?.map((s) => s.count) || [1]),
+    1,
+  );
+  const maxServiceCount = Math.max(
+    ...(report?.serviceBreakdown?.map((s) => s.count) || [1]),
+    1,
+  );
   const maxMonthlyEarnings = Math.max(
     ...(report?.monthlyPerformance?.map((m) => m.earnings) || [1]),
     1,
@@ -143,16 +152,26 @@ function PerformanceInsightsContent({ navigation }) {
               ? `${stats.ratingCount} driver review${stats.ratingCount === 1 ? "" : "s"}`
               : "No reviews yet"}
             {" · "}
-            {totalRequests} total request{totalRequests === 1 ? "" : "s"} on record
+            {totalRequests} total request{totalRequests === 1 ? "" : "s"} on
+            record
           </Text>
         </Card>
 
         <SectionTitle>Financial Overview</SectionTitle>
         <View style={styles.gridWrap}>
           <StatTile label="This Month" value={`GHS ${stats.monthlyIncome}`} />
-          <StatTile label="All-Time Earnings" value={`GHS ${stats.totalIncome}`} />
-          <StatTile label="Avg. Job Value" value={`GHS ${stats.averageJobValue}`} />
-          <StatTile label="Pending Payment" value={`GHS ${stats.pendingPayment}`} />
+          <StatTile
+            label="All-Time Earnings"
+            value={`GHS ${stats.totalIncome}`}
+          />
+          <StatTile
+            label="Avg. Job Value"
+            value={`GHS ${stats.averageJobValue}`}
+          />
+          <StatTile
+            label="Pending Payment"
+            value={`GHS ${stats.pendingPayment}`}
+          />
         </View>
 
         <SectionTitle>Customer & Response Metrics</SectionTitle>
@@ -221,7 +240,10 @@ function PerformanceInsightsContent({ navigation }) {
           {(report?.monthlyPerformance || []).map((month) => {
             const barWidth =
               maxMonthlyEarnings > 0
-                ? Math.max((month.earnings / maxMonthlyEarnings) * 100, month.earnings > 0 ? 8 : 0)
+                ? Math.max(
+                    (month.earnings / maxMonthlyEarnings) * 100,
+                    month.earnings > 0 ? 8 : 0,
+                  )
                 : 0;
 
             return (
@@ -229,14 +251,18 @@ function PerformanceInsightsContent({ navigation }) {
                 <View style={styles.monthHeader}>
                   <Text style={styles.monthLabel}>{month.label}</Text>
                   <Text style={styles.monthValue}>
-                    {month.jobs} job{month.jobs === 1 ? "" : "s"} · GHS {month.earnings}
+                    {month.jobs} job{month.jobs === 1 ? "" : "s"} · GHS{" "}
+                    {month.earnings}
                   </Text>
                 </View>
                 <View style={styles.breakdownTrack}>
                   <View
                     style={[
                       styles.breakdownFill,
-                      { width: `${barWidth}%`, backgroundColor: colors.warning },
+                      {
+                        width: `${barWidth}%`,
+                        backgroundColor: colors.warning,
+                      },
                     ]}
                   />
                 </View>
@@ -262,7 +288,9 @@ function PerformanceInsightsContent({ navigation }) {
                 {review.feedback ? (
                   <Text style={styles.reviewFeedback}>{review.feedback}</Text>
                 ) : (
-                  <Text style={styles.reviewFeedbackMuted}>No written feedback</Text>
+                  <Text style={styles.reviewFeedbackMuted}>
+                    No written feedback
+                  </Text>
                 )}
                 <Text style={styles.reviewDate}>{review.createdAt}</Text>
               </View>
@@ -280,7 +308,9 @@ function PerformanceInsightsContent({ navigation }) {
                 <View style={styles.timelineHeader}>
                   <Text style={styles.timelineDriver}>{item.driver}</Text>
                   <View style={styles.statusPill}>
-                    <Text style={styles.statusPillText}>{item.statusLabel}</Text>
+                    <Text style={styles.statusPillText}>
+                      {item.statusLabel}
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.timelineIssue}>🔧 {item.issue}</Text>
@@ -291,7 +321,9 @@ function PerformanceInsightsContent({ navigation }) {
                   <Text style={styles.timelineMeta}>📝 {item.description}</Text>
                 ) : null}
                 <View style={styles.timelineFooter}>
-                  <Text style={styles.timelineMeta}>Created {item.createdAt}</Text>
+                  <Text style={styles.timelineMeta}>
+                    Created {item.createdAt}
+                  </Text>
                   {item.amount > 0 ? (
                     <Text style={styles.timelineAmount}>GHS {item.amount}</Text>
                   ) : null}

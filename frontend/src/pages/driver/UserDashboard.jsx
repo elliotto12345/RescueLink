@@ -4,11 +4,12 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import ProtectedScreen from "../../navigation/ProtectedScreen";
 import BottomNav from "../../components/layout/BottomNav";
@@ -125,13 +126,19 @@ function DashboardContent({ navigation }) {
 
         if (!prev) return;
 
-        const mechanicName = request.mechanicName || activeRequestMeta?.mechanic?.name || "Your mechanic";
+        const mechanicName =
+          request.mechanicName ||
+          activeRequestMeta?.mechanic?.name ||
+          "Your mechanic";
 
         if (
           request.status === REQUEST_STATUS.ON_THE_WAY &&
           prev.status !== REQUEST_STATUS.ON_THE_WAY
         ) {
-          Alert.alert("Mechanic On The Way", `${mechanicName} is heading to your location.`);
+          Alert.alert(
+            "Mechanic On The Way",
+            `${mechanicName} is heading to your location.`,
+          );
         }
 
         if (request.mechanicArrived && !prev.mechanicArrived) {
@@ -200,8 +207,12 @@ function DashboardContent({ navigation }) {
             onPress={openActiveRequest}
           >
             <Text style={styles.activeRequestTitle}>{activeMessage.title}</Text>
-            <Text style={styles.activeRequestSubtitle}>{activeMessage.subtitle}</Text>
-            <Text style={styles.activeRequestAction}>Tap to view active request →</Text>
+            <Text style={styles.activeRequestSubtitle}>
+              {activeMessage.subtitle}
+            </Text>
+            <Text style={styles.activeRequestAction}>
+              Tap to view active request →
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -238,39 +249,39 @@ function DashboardContent({ navigation }) {
             </Card>
           ) : (
             requests.map((request) => (
-            <TouchableOpacity
-              key={request.id}
-              activeOpacity={
-                request.status === "Completed" && !request.rated ? 0.7 : 1
-              }
-              onPress={() => {
-                if (request.status === "Completed" && !request.rated) {
-                  navigation.navigate("Ratings", {
-                    providerName: request.mechanic,
-                    service: request.issue,
-                    date: request.date,
-                    requestId: request.id,
-                  });
+              <TouchableOpacity
+                key={request.id}
+                activeOpacity={
+                  request.status === "Completed" && !request.rated ? 0.7 : 1
                 }
-              }}
-            >
-              <Card style={styles.requestCard}>
-                <View style={styles.requestLeft}>
-                  <Text style={styles.requestIssue}>
-                    {request.issue}
-                  </Text>
-                  <Text style={styles.requestMechanic} numberOfLines={1}>
-                    🔧 {request.mechanic}
-                  </Text>
-                  <Text style={styles.requestDate}>📅 {request.date}</Text>
-                  {request.status === "Completed" && !request.rated && (
-                    <Text style={styles.rateHint}>Tap to rate this service ⭐</Text>
-                  )}
-                </View>
-                <StatusBadge status={request.status} />
-              </Card>
-            </TouchableOpacity>
-          ))
+                onPress={() => {
+                  if (request.status === "Completed" && !request.rated) {
+                    navigation.navigate("Ratings", {
+                      providerName: request.mechanic,
+                      service: request.issue,
+                      date: request.date,
+                      requestId: request.id,
+                    });
+                  }
+                }}
+              >
+                <Card style={styles.requestCard}>
+                  <View style={styles.requestLeft}>
+                    <Text style={styles.requestIssue}>{request.issue}</Text>
+                    <Text style={styles.requestMechanic} numberOfLines={1}>
+                      🔧 {request.mechanic}
+                    </Text>
+                    <Text style={styles.requestDate}>📅 {request.date}</Text>
+                    {request.status === "Completed" && !request.rated && (
+                      <Text style={styles.rateHint}>
+                        Tap to rate this service ⭐
+                      </Text>
+                    )}
+                  </View>
+                  <StatusBadge status={request.status} />
+                </Card>
+              </TouchableOpacity>
+            ))
           )}
         </View>
         <View style={{ height: 100 }} />

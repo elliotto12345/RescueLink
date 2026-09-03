@@ -3,12 +3,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   TextInput,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useEffect } from "react";
 import {
   connectSocket,
@@ -17,7 +18,10 @@ import {
   emitServiceComplete,
   getSocket,
 } from "../../services/socket";
-import { updateServiceRequestStatus, subscribeToServiceRequest } from "../../services/requestService";
+import {
+  updateServiceRequestStatus,
+  subscribeToServiceRequest,
+} from "../../services/requestService";
 import { REQUEST_STATUS, JOB_STEP } from "../../constants/requestStatus";
 import { getUser } from "../../services/storage";
 import { ROLES } from "../../constants/roles";
@@ -48,7 +52,8 @@ export default function JobScreen({ navigation, route }) {
       const user = await getUser();
       if (!user?.id) return;
 
-      const socket = getSocket() || connectSocket(user.id, user.role || ROLES.PROVIDER);
+      const socket =
+        getSocket() || connectSocket(user.id, user.role || ROLES.PROVIDER);
 
       socket.off("driverArrived");
       socket.on("driverArrived", (data) => {
@@ -100,9 +105,13 @@ export default function JobScreen({ navigation, route }) {
     setSubmitting(true);
     try {
       if (currentStatus === JOB_STEP.ACCEPTED) {
-        await updateServiceRequestStatus(request.id, REQUEST_STATUS.ON_THE_WAY, {
-          onTheWayAt: new Date().toISOString(),
-        });
+        await updateServiceRequestStatus(
+          request.id,
+          REQUEST_STATUS.ON_THE_WAY,
+          {
+            onTheWayAt: new Date().toISOString(),
+          },
+        );
         emitMechanicOnTheWay(buildPayload(user));
         setCurrentStatus(JOB_STEP.ON_THE_WAY);
         return;
@@ -124,15 +133,22 @@ export default function JobScreen({ navigation, route }) {
       if (currentStatus === JOB_STEP.ARRIVED) {
         const amount = parseFloat(chargeAmount);
         if (!chargeAmount || Number.isNaN(amount) || amount <= 0) {
-          Alert.alert("Enter Amount", "Please enter the service charge amount.");
+          Alert.alert(
+            "Enter Amount",
+            "Please enter the service charge amount.",
+          );
           return;
         }
 
-        await updateServiceRequestStatus(request.id, REQUEST_STATUS.SERVICE_COMPLETE, {
-          completedAt: new Date().toISOString(),
-          amount,
-          currency: "GHS",
-        });
+        await updateServiceRequestStatus(
+          request.id,
+          REQUEST_STATUS.SERVICE_COMPLETE,
+          {
+            completedAt: new Date().toISOString(),
+            amount,
+            currency: "GHS",
+          },
+        );
         emitServiceComplete({ ...buildPayload(user), amount, currency: "GHS" });
         setCurrentStatus(JOB_STEP.COMPLETED);
       }
@@ -144,7 +160,11 @@ export default function JobScreen({ navigation, route }) {
   };
 
   useEffect(() => {
-    if (mechanicArrived && driverArrived && currentStatus === JOB_STEP.ON_THE_WAY) {
+    if (
+      mechanicArrived &&
+      driverArrived &&
+      currentStatus === JOB_STEP.ON_THE_WAY
+    ) {
       setCurrentStatus(JOB_STEP.ARRIVED);
     }
   }, [mechanicArrived, driverArrived, currentStatus]);
@@ -162,7 +182,11 @@ export default function JobScreen({ navigation, route }) {
 
   const getNextButtonColor = () => {
     if (currentStatus === JOB_STEP.COMPLETED) return "#16A34A";
-    if (currentStatus === JOB_STEP.ON_THE_WAY && mechanicArrived && !driverArrived) {
+    if (
+      currentStatus === JOB_STEP.ON_THE_WAY &&
+      mechanicArrived &&
+      !driverArrived
+    ) {
       return "#9CA3AF";
     }
     return "#2563EB";
@@ -220,12 +244,16 @@ export default function JobScreen({ navigation, route }) {
             </View>
             <View style={styles.userDetails}>
               <Text style={styles.userName}>{request.user || "Customer"}</Text>
-              <Text style={styles.userIssue}>🔧 {request.issue || "Service request"}</Text>
+              <Text style={styles.userIssue}>
+                🔧 {request.issue || "Service request"}
+              </Text>
               <Text style={styles.userLocation}>
                 📍 {request.location || request.address || "Location shared"}
               </Text>
               {request.distance ? (
-                <Text style={styles.userDistance}>🗺️ {request.distance} away</Text>
+                <Text style={styles.userDistance}>
+                  🗺️ {request.distance} away
+                </Text>
               ) : null}
             </View>
           </View>
@@ -257,23 +285,24 @@ export default function JobScreen({ navigation, route }) {
           </View>
         </View>
 
-        {(mechanicArrived || driverArrived) && currentStatus !== JOB_STEP.COMPLETED && (
-          <View style={styles.arrivalCard}>
-            <Text style={styles.arrivalTitle}>Arrival Confirmation</Text>
-            <View style={styles.arrivalRow}>
-              <Text style={styles.arrivalLabel}>You arrived</Text>
-              <Text style={styles.arrivalStatus}>
-                {mechanicArrived ? "✅ Confirmed" : "⏳ Pending"}
-              </Text>
+        {(mechanicArrived || driverArrived) &&
+          currentStatus !== JOB_STEP.COMPLETED && (
+            <View style={styles.arrivalCard}>
+              <Text style={styles.arrivalTitle}>Arrival Confirmation</Text>
+              <View style={styles.arrivalRow}>
+                <Text style={styles.arrivalLabel}>You arrived</Text>
+                <Text style={styles.arrivalStatus}>
+                  {mechanicArrived ? "✅ Confirmed" : "⏳ Pending"}
+                </Text>
+              </View>
+              <View style={styles.arrivalRow}>
+                <Text style={styles.arrivalLabel}>Driver confirmed</Text>
+                <Text style={styles.arrivalStatus}>
+                  {driverArrived ? "✅ Confirmed" : "⏳ Waiting..."}
+                </Text>
+              </View>
             </View>
-            <View style={styles.arrivalRow}>
-              <Text style={styles.arrivalLabel}>Driver confirmed</Text>
-              <Text style={styles.arrivalStatus}>
-                {driverArrived ? "✅ Confirmed" : "⏳ Waiting..."}
-              </Text>
-            </View>
-          </View>
-        )}
+          )}
 
         <View style={styles.mapPlaceholder}>
           <Text style={styles.mapEmoji}>🗺️</Text>
@@ -313,7 +342,9 @@ export default function JobScreen({ navigation, route }) {
                       {step.label}
                     </Text>
                     {isActive && (
-                      <Text style={styles.timelineActiveTag}>Current Status</Text>
+                      <Text style={styles.timelineActiveTag}>
+                        Current Status
+                      </Text>
                     )}
                   </View>
                   {isDone && !isActive && (
@@ -340,7 +371,9 @@ export default function JobScreen({ navigation, route }) {
               {request.issue} · {request.user || "Driver"}
             </Text>
             {request.amount != null && (
-              <Text style={styles.readOnlyAmount}>Earned: GHS {request.amount}</Text>
+              <Text style={styles.readOnlyAmount}>
+                Earned: GHS {request.amount}
+              </Text>
             )}
           </View>
         )}
@@ -349,7 +382,8 @@ export default function JobScreen({ navigation, route }) {
           <View style={styles.chargeCard}>
             <Text style={styles.chargeTitle}>Service Charge</Text>
             <Text style={styles.chargeHint}>
-              Enter the amount to charge the driver after completing the service.
+              Enter the amount to charge the driver after completing the
+              service.
             </Text>
             <View style={styles.chargeInputRow}>
               <Text style={styles.chargeCurrency}>GHS</Text>
@@ -382,7 +416,8 @@ export default function JobScreen({ navigation, route }) {
             <Text style={styles.completedEmoji}>🎉</Text>
             <Text style={styles.completedTitle}>Job Completed!</Text>
             <Text style={styles.completedSubtitle}>
-              The driver has been notified to proceed with payment of GHS {chargeAmount}.
+              The driver has been notified to proceed with payment of GHS{" "}
+              {chargeAmount}.
             </Text>
             <TouchableOpacity
               style={styles.backHomeButton}

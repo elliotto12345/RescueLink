@@ -45,7 +45,10 @@ export default function AppNavigator() {
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
-          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen
+            name="ForgotPassword"
+            component={ForgotPasswordScreen}
+          />
           <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} />
           <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
 
@@ -53,14 +56,23 @@ export default function AppNavigator() {
           <Stack.Screen name="UserDashboard" component={UserDashboard} />
           <Stack.Screen name="RequestHelp" component={RequestHelpScreen} />
           <Stack.Screen name="TrackMechanic" component={TrackMechanicScreen} />
-          <Stack.Screen name="EmergencyCenter" component={EmergencyCenterScreen} />
+          <Stack.Screen
+            name="EmergencyCenter"
+            component={EmergencyCenterScreen}
+          />
           <Stack.Screen name="Payments" component={PaymentsScreen} />
           <Stack.Screen name="Ratings" component={RatingsScreen} />
 
           {/* Mechanic routes */}
-          <Stack.Screen name="MechanicDashboard" component={MechanicDashboard} />
+          <Stack.Screen
+            name="MechanicDashboard"
+            component={MechanicDashboard}
+          />
           <Stack.Screen name="JobScreen" component={JobScreen} />
-          <Stack.Screen name="PerformanceInsights" component={PerformanceInsightsScreen} />
+          <Stack.Screen
+            name="PerformanceInsights"
+            component={PerformanceInsightsScreen}
+          />
 
           {/* Admin routes */}
           <Stack.Screen name="AdminDashboard" component={AdminDashboard} />

@@ -4,13 +4,14 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   TextInput,
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { doc, updateDoc } from "firebase/firestore";
 import { getUser } from "../services/storage";
 import { logoutUser } from "../services/authService";

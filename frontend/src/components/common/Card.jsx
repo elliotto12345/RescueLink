@@ -1,11 +1,10 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, radius, shadow } from "../../constants/theme";
 
 export default function Card({ children, style, padding = 16 }) {
-  return (
-    <View style={[styles.card, { padding }, style]}>{children}</View>
-  );
+  return <View style={[styles.card, { padding }, style]}>{children}</View>;
 }
 
 export function CardTitle({ children, style }) {

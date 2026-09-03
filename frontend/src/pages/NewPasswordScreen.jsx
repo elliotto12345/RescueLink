@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import ScreenHeader from "../components/layout/ScreenHeader";
@@ -61,10 +62,7 @@ export default function NewPasswordScreen({ navigation, route }) {
         [{ text: "Go to Login", onPress: () => navigation.navigate("Login") }],
       );
     } catch (error) {
-      Alert.alert(
-        "Error",
-        formatApiError(error),
-      );
+      Alert.alert("Error", formatApiError(error));
     } finally {
       setLoading(false);
     }
@@ -99,7 +97,11 @@ export default function NewPasswordScreen({ navigation, route }) {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
             />
-            <Button title="Update Password" onPress={handleReset} loading={loading} />
+            <Button
+              title="Update Password"
+              onPress={handleReset}
+              loading={loading}
+            />
             <TouchableOpacity onPress={() => navigation.navigate("Login")}>
               <Text style={styles.link}>Back to Login</Text>
             </TouchableOpacity>

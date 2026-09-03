@@ -3,13 +3,14 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   TouchableOpacity,
   Linking,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import ProtectedScreen from "../../navigation/ProtectedScreen";
 import ScreenHeader from "../../components/layout/ScreenHeader";
 import BottomNav from "../../components/layout/BottomNav";

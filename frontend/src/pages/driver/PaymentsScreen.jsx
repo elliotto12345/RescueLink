@@ -3,19 +3,23 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   TouchableOpacity,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import ProtectedScreen from "../../navigation/ProtectedScreen";
 import ScreenHeader from "../../components/layout/ScreenHeader";
 import Card, { CardTitle, CardSubtitle } from "../../components/common/Card";
 import Button from "../../components/common/Button";
 import SectionTitle from "../../components/layout/SectionTitle";
 import { addServiceHistory } from "../../services/serviceHistory";
-import { clearActiveServiceRequest, markRequestPaid } from "../../services/requestService";
+import {
+  clearActiveServiceRequest,
+  markRequestPaid,
+} from "../../services/requestService";
 import { colors, radius } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
 

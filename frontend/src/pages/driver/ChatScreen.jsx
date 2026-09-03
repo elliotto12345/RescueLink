@@ -1,10 +1,16 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   TextInput,
   FlatList,
@@ -12,6 +18,7 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { connectSocket, getSocket } from "../../services/socket";
 import {
   sendChatMessage,
@@ -108,7 +115,8 @@ function ChatThread({
   );
 
   useEffect(() => {
-    if (!conversationId || !currentUser?.id || !resolvedRequestIds.length) return;
+    if (!conversationId || !currentUser?.id || !resolvedRequestIds.length)
+      return;
 
     let cancelled = false;
 
@@ -139,7 +147,10 @@ function ChatThread({
     const loadMessages = async () => {
       let hadCached = false;
       try {
-        const cached = await loadCachedMessagesOnly(resolvedRequestIds, INITIAL_MESSAGE_LIMIT);
+        const cached = await loadCachedMessagesOnly(
+          resolvedRequestIds,
+          INITIAL_MESSAGE_LIMIT,
+        );
         if (cancelled) return;
 
         if (cached.length) {
@@ -149,14 +160,20 @@ function ChatThread({
           setSyncingRemote(true);
         }
 
-        const remote = await syncRemoteMessages(resolvedRequestIds, INITIAL_MESSAGE_LIMIT);
+        const remote = await syncRemoteMessages(
+          resolvedRequestIds,
+          INITIAL_MESSAGE_LIMIT,
+        );
         if (cancelled) return;
 
         setMessages((prev) => mergeConversationMessages(prev, remote));
         setLoadingInitial(false);
         setSyncingRemote(false);
 
-        if (remote.length < INITIAL_MESSAGE_LIMIT && cached.length < INITIAL_MESSAGE_LIMIT) {
+        if (
+          remote.length < INITIAL_MESSAGE_LIMIT &&
+          cached.length < INITIAL_MESSAGE_LIMIT
+        ) {
           setHasMore(false);
           hasMoreRef.current = false;
         }
@@ -174,7 +191,8 @@ function ChatThread({
 
     loadMessages();
 
-    const socket = getSocket() || connectSocket(currentUser.id, currentUser.role);
+    const socket =
+      getSocket() || connectSocket(currentUser.id, currentUser.role);
 
     const handleReceive = async (data) => {
       if (!belongsToConversation(data)) return;
@@ -205,7 +223,11 @@ function ChatThread({
       ) {
         return;
       }
-      if (!data.conversationId && data.requestId && !resolvedRequestIds.includes(data.requestId)) {
+      if (
+        !data.conversationId &&
+        data.requestId &&
+        !resolvedRequestIds.includes(data.requestId)
+      ) {
         return;
       }
       setOtherTyping(true);
@@ -218,7 +240,11 @@ function ChatThread({
       ) {
         return;
       }
-      if (!data.conversationId && data.requestId && !resolvedRequestIds.includes(data.requestId)) {
+      if (
+        !data.conversationId &&
+        data.requestId &&
+        !resolvedRequestIds.includes(data.requestId)
+      ) {
         return;
       }
       setOtherTyping(false);
@@ -226,7 +252,11 @@ function ChatThread({
 
     const handleMessagesRead = (data) => {
       if (data.conversationId && data.conversationId !== conversationId) return;
-      if (!data.conversationId && data.requestId && !resolvedRequestIds.includes(data.requestId)) {
+      if (
+        !data.conversationId &&
+        data.requestId &&
+        !resolvedRequestIds.includes(data.requestId)
+      ) {
         return;
       }
       setMessages((prev) =>
@@ -263,7 +293,13 @@ function ChatThread({
       socket.off("typingStop", handleTypingStop);
       socket.off("messagesRead", handleMessagesRead);
       if (isTypingRef.current) {
-        emitTyping(conversationId, currentUser.id, currentUser.name, false, otherParty?.id);
+        emitTyping(
+          conversationId,
+          currentUser.id,
+          currentUser.name,
+          false,
+          otherParty?.id,
+        );
       }
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
@@ -281,7 +317,8 @@ function ChatThread({
   ]);
 
   const handleLoadOlder = useCallback(async () => {
-    if (!hasMoreRef.current || loadingOlderRef.current || messages.length === 0) return;
+    if (!hasMoreRef.current || loadingOlderRef.current || messages.length === 0)
+      return;
 
     loadingOlderRef.current = true;
     setLoadingOlder(true);
@@ -324,14 +361,26 @@ function ChatThread({
 
     if (!isTypingRef.current && text.trim()) {
       isTypingRef.current = true;
-      emitTyping(conversationId, currentUser.id, currentUser.name, true, otherParty?.id);
+      emitTyping(
+        conversationId,
+        currentUser.id,
+        currentUser.name,
+        true,
+        otherParty?.id,
+      );
     }
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       if (isTypingRef.current) {
         isTypingRef.current = false;
-        emitTyping(conversationId, currentUser.id, currentUser.name, false, otherParty?.id);
+        emitTyping(
+          conversationId,
+          currentUser.id,
+          currentUser.name,
+          false,
+          otherParty?.id,
+        );
       }
     }, TYPING_DEBOUNCE_MS);
   };
@@ -341,7 +390,13 @@ function ChatThread({
 
     if (isTypingRef.current) {
       isTypingRef.current = false;
-      emitTyping(conversationId, currentUser.id, currentUser.name, false, otherParty?.id);
+      emitTyping(
+        conversationId,
+        currentUser.id,
+        currentUser.name,
+        false,
+        otherParty?.id,
+      );
     }
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
@@ -402,16 +457,20 @@ function ChatThread({
           <Text
             style={[
               styles.messageText,
-              isOwnMessage(msg) ? styles.ownMessageText : styles.otherMessageText,
+              isOwnMessage(msg)
+                ? styles.ownMessageText
+                : styles.otherMessageText,
             ]}
           >
-                    {msg.text || msg.message}
+            {msg.text || msg.message}
           </Text>
           <View style={styles.messageMeta}>
             <Text
               style={[
                 styles.messageTime,
-                isOwnMessage(msg) ? styles.ownMessageTime : styles.otherMessageTime,
+                isOwnMessage(msg)
+                  ? styles.ownMessageTime
+                  : styles.otherMessageTime,
               ]}
             >
               {msg.time}
@@ -461,7 +520,8 @@ function ChatThread({
         ) : messages.length === 0 ? (
           <View style={styles.emptyThread}>
             <Text style={styles.emptyThreadText}>
-              {loadError || "No messages yet. Say hello to start the conversation."}
+              {loadError ||
+                "No messages yet. Say hello to start the conversation."}
             </Text>
           </View>
         ) : (
@@ -487,7 +547,9 @@ function ChatThread({
                 </View>
               ) : hasMore && messages.length >= INITIAL_MESSAGE_LIMIT ? (
                 <View style={styles.loadingOlder}>
-                  <Text style={styles.loadOlderHint}>Scroll up for older messages</Text>
+                  <Text style={styles.loadOlderHint}>
+                    Scroll up for older messages
+                  </Text>
                 </View>
               ) : null
             }
@@ -497,7 +559,9 @@ function ChatThread({
         {syncingRemote && (
           <View style={styles.syncBanner}>
             <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.syncBannerText}>Syncing latest messages...</Text>
+            <Text style={styles.syncBannerText}>
+              Syncing latest messages...
+            </Text>
           </View>
         )}
 
@@ -509,7 +573,9 @@ function ChatThread({
 
         {otherTyping && (
           <View style={styles.typingBar}>
-            <Text style={styles.typingText}>{otherParty.name} is typing...</Text>
+            <Text style={styles.typingText}>
+              {otherParty.name} is typing...
+            </Text>
           </View>
         )}
 
@@ -575,7 +641,9 @@ function ChatList({ navigation, currentUser, role, onOpenThread }) {
         currentUser.id,
         role,
       );
-      setThreads(built.map((t) => mapThreadToListItem(t, currentUser.id, role)));
+      setThreads(
+        built.map((t) => mapThreadToListItem(t, currentUser.id, role)),
+      );
     } catch {
       setThreads([]);
     } finally {
@@ -660,11 +728,17 @@ function ChatList({ navigation, currentUser, role, onOpenThread }) {
                   driverId:
                     role === ROLES.PROVIDER ? thread.driverId : currentUser.id,
                   mechanicId:
-                    role === ROLES.PROVIDER ? currentUser.id : thread.mechanicId,
+                    role === ROLES.PROVIDER
+                      ? currentUser.id
+                      : thread.mechanicId,
                   driverName:
-                    role === ROLES.PROVIDER ? thread.driverName : currentUser.name,
+                    role === ROLES.PROVIDER
+                      ? thread.driverName
+                      : currentUser.name,
                   mechanicName:
-                    role === ROLES.PROVIDER ? currentUser.name : thread.mechanicName,
+                    role === ROLES.PROVIDER
+                      ? currentUser.name
+                      : thread.mechanicName,
                   issue: thread.issue,
                 },
               })
@@ -712,7 +786,11 @@ function buildThreadFromRoute(route, currentUser) {
   const other =
     routeOtherParty ||
     (routeMechanic
-      ? { id: routeMechanic.id, name: routeMechanic.name, subtitle: "Your mechanic" }
+      ? {
+          id: routeMechanic.id,
+          name: routeMechanic.name,
+          subtitle: "Your mechanic",
+        }
       : { id: routeDriver?.id, name: routeDriver?.name, subtitle: "Driver" });
 
   const driverId =
@@ -728,7 +806,8 @@ function buildThreadFromRoute(route, currentUser) {
   return {
     conversationId,
     requestId: routeRequestId,
-    requestIds: route.params?.requestIds || (routeRequestId ? [routeRequestId] : []),
+    requestIds:
+      route.params?.requestIds || (routeRequestId ? [routeRequestId] : []),
     otherParty: other,
     threadMeta: {
       driverId,
@@ -813,9 +892,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
   },
-  listTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
+  listTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+  },
   listTitle: { fontSize: 22, fontWeight: "bold", color: colors.text },
-  listSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4, marginBottom: 12 },
+  listSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+    marginBottom: 12,
+  },
   totalUnreadBadge: {
     backgroundColor: colors.primary,
     borderRadius: 10,
@@ -867,7 +956,12 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
   },
-  listItemName: { fontSize: 16, fontWeight: "bold", color: colors.text, flex: 1 },
+  listItemName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: colors.text,
+    flex: 1,
+  },
   listItemTime: { fontSize: 12, color: colors.primary },
   listItemPreview: { fontSize: 14, color: colors.textSecondary, flex: 1 },
   unreadBadge: {
@@ -892,7 +986,12 @@ const styles = StyleSheet.create({
   },
   headerBack: { flexShrink: 0 },
   backText: { fontSize: 16, color: colors.primary, fontWeight: "600" },
-  headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  headerCenter: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   headerTextWrap: { flex: 1 },
   avatar: {
     width: 52,
@@ -934,7 +1033,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: colors.emergencyLight,
   },
-  errorBannerText: { fontSize: 12, color: colors.emergency, textAlign: "center" },
+  errorBannerText: {
+    fontSize: 12,
+    color: colors.emergency,
+    textAlign: "center",
+  },
   messagesList: { flex: 1 },
   messagesContent: { paddingHorizontal: 16, paddingVertical: 12 },
   loadingOlder: {
@@ -942,8 +1045,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   loadOlderHint: { fontSize: 12, color: colors.textMuted },
-  emptyThread: { flex: 1, paddingVertical: 40, alignItems: "center", justifyContent: "center" },
-  emptyThreadText: { fontSize: 14, color: colors.textSecondary, textAlign: "center" },
+  emptyThread: {
+    flex: 1,
+    paddingVertical: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyThreadText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
   dateSeparatorWrap: {
     alignItems: "center",
     marginVertical: 10,
@@ -959,7 +1071,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: "600",
   },
-  messageRow: { flexDirection: "row", alignItems: "flex-end", gap: 8, marginVertical: 2 },
+  messageRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    marginVertical: 2,
+  },
   messageRowOwn: { justifyContent: "flex-end" },
   messageRowOther: { justifyContent: "flex-start" },
   smallAvatar: {
@@ -971,7 +1088,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   smallAvatarText: { color: colors.white, fontSize: 12, fontWeight: "bold" },
-  messageBubble: { maxWidth: "78%", borderRadius: radius.lg, paddingHorizontal: 12, paddingVertical: 8 },
+  messageBubble: {
+    maxWidth: "78%",
+    borderRadius: radius.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
   ownBubble: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
   otherBubble: {
     backgroundColor: colors.white,
@@ -1001,7 +1123,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     backgroundColor: colors.background,
   },
-  typingText: { fontSize: 13, color: colors.textSecondary, fontStyle: "italic" },
+  typingText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+  },
   inputContainer: {
     flexDirection: "row",
     alignItems: "flex-end",

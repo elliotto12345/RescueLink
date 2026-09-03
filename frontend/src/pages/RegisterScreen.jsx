@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import ScreenHeader from "../components/layout/ScreenHeader";
@@ -75,7 +76,10 @@ export default function RegisterScreen({ navigation }) {
       } else if (error.code === "auth/invalid-email") {
         Alert.alert("Error", "Please enter a valid email address.");
       } else if (error.code === "auth/weak-password") {
-        Alert.alert("Error", "Password is too weak. Use at least 6 characters.");
+        Alert.alert(
+          "Error",
+          "Password is too weak. Use at least 6 characters.",
+        );
       } else if (error.response?.data?.error) {
         Alert.alert("Error", error.response.data.error);
       } else {

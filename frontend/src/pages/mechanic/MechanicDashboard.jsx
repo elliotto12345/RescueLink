@@ -4,15 +4,22 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   RefreshControl,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
-import { connectSocket, sendLocation, emitAcceptRequest, emitDeclineRequest, getSocket } from "../../services/socket";
+import {
+  connectSocket,
+  sendLocation,
+  emitAcceptRequest,
+  emitDeclineRequest,
+  getSocket,
+} from "../../services/socket";
 import { updateMechanicLocation } from "../../services/mechanicPresence";
 import {
   fetchPendingServiceRequestsForMechanic,
@@ -94,7 +101,8 @@ export default function MechanicDashboard({ navigation }) {
         acceptedAt: new Date().toISOString(),
       });
 
-      const socket = getSocket() || connectSocket(user.id, user.role || ROLES.PROVIDER);
+      const socket =
+        getSocket() || connectSocket(user.id, user.role || ROLES.PROVIDER);
       emitAcceptRequest({
         requestId: request.id,
         id: request.id,
@@ -127,12 +135,17 @@ export default function MechanicDashboard({ navigation }) {
           style: "destructive",
           onPress: async () => {
             try {
-              await updateServiceRequestStatus(request.id, REQUEST_STATUS.DECLINED, {
-                declinedAt: new Date().toISOString(),
-              });
+              await updateServiceRequestStatus(
+                request.id,
+                REQUEST_STATUS.DECLINED,
+                {
+                  declinedAt: new Date().toISOString(),
+                },
+              );
 
               const socket =
-                getSocket() || connectSocket(user.id, user.role || ROLES.PROVIDER);
+                getSocket() ||
+                connectSocket(user.id, user.role || ROLES.PROVIDER);
               emitDeclineRequest({
                 requestId: request.id,
                 id: request.id,
@@ -141,7 +154,9 @@ export default function MechanicDashboard({ navigation }) {
                 mechanicName: user.name,
               });
 
-              setLiveRequests((prev) => prev.filter((r) => r.id !== request.id));
+              setLiveRequests((prev) =>
+                prev.filter((r) => r.id !== request.id),
+              );
             } catch (error) {
               Alert.alert(
                 "Error",
@@ -274,7 +289,9 @@ export default function MechanicDashboard({ navigation }) {
               {stats.rating > 0 ? `⭐ ${stats.rating}` : "—"}
             </Text>
             <Text style={styles.statLabel}>
-              {stats.ratingCount > 0 ? `${stats.ratingCount} reviews` : "Rating"}
+              {stats.ratingCount > 0
+                ? `${stats.ratingCount} reviews`
+                : "Rating"}
             </Text>
           </View>
           <View style={styles.statCard}>
@@ -303,11 +320,15 @@ export default function MechanicDashboard({ navigation }) {
               <Text style={styles.insightLabel}>Jobs This Month</Text>
             </View>
             <View style={styles.insightItem}>
-              <Text style={styles.insightValue}>GHS {stats.averageJobValue}</Text>
+              <Text style={styles.insightValue}>
+                GHS {stats.averageJobValue}
+              </Text>
               <Text style={styles.insightLabel}>Avg. Job Value</Text>
             </View>
             <View style={styles.insightItem}>
-              <Text style={styles.insightValue}>GHS {stats.pendingPayment}</Text>
+              <Text style={styles.insightValue}>
+                GHS {stats.pendingPayment}
+              </Text>
               <Text style={styles.insightLabel}>Pending Payment</Text>
             </View>
           </View>
@@ -423,43 +444,43 @@ export default function MechanicDashboard({ navigation }) {
               </View>
             ) : (
               completedJobs.map((job) => (
-              <TouchableOpacity
-                key={job.id}
-                style={styles.completedCard}
-                onPress={() =>
-                  navigation.navigate("JobScreen", {
-                    request: {
-                      id: job.id,
-                      user: job.user,
-                      issue: job.issue,
-                      address: job.address,
-                      status: job.status,
-                      amount: job.amount,
-                      readOnly: true,
-                    },
-                  })
-                }
-              >
-                <View style={styles.completedLeft}>
-                  <Text style={styles.completedUser}>{job.user}</Text>
-                  <Text style={styles.completedIssue}>🔧 {job.issue}</Text>
-                  <Text style={styles.completedDate}>📅 {job.date}</Text>
-                  {job.address ? (
-                    <Text style={styles.completedAddress} numberOfLines={1}>
-                      📍 {job.address}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={styles.completedRight}>
-                  <View style={styles.earnedBadge}>
-                    <Text style={styles.earnedText}>{job.earned}</Text>
+                <TouchableOpacity
+                  key={job.id}
+                  style={styles.completedCard}
+                  onPress={() =>
+                    navigation.navigate("JobScreen", {
+                      request: {
+                        id: job.id,
+                        user: job.user,
+                        issue: job.issue,
+                        address: job.address,
+                        status: job.status,
+                        amount: job.amount,
+                        readOnly: true,
+                      },
+                    })
+                  }
+                >
+                  <View style={styles.completedLeft}>
+                    <Text style={styles.completedUser}>{job.user}</Text>
+                    <Text style={styles.completedIssue}>🔧 {job.issue}</Text>
+                    <Text style={styles.completedDate}>📅 {job.date}</Text>
+                    {job.address ? (
+                      <Text style={styles.completedAddress} numberOfLines={1}>
+                        📍 {job.address}
+                      </Text>
+                    ) : null}
                   </View>
-                  {job.status === "service_complete" && (
-                    <Text style={styles.pendingLabel}>Awaiting payment</Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))
+                  <View style={styles.completedRight}>
+                    <View style={styles.earnedBadge}>
+                      <Text style={styles.earnedText}>{job.earned}</Text>
+                    </View>
+                    {job.status === "service_complete" && (
+                      <Text style={styles.pendingLabel}>Awaiting payment</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))
             )}
           </View>
         )}

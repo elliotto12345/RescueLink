@@ -4,10 +4,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Button from "../components/common/Button";
 import Card from "../components/common/Card";
 import { colors, radius, spacing } from "../constants/theme";
@@ -36,10 +37,26 @@ const LANDING_FEATURES = [
 ];
 
 const HOW_IT_WORKS = [
-  { step: 1, title: "Request Help", description: "Tap SOS and share your location." },
-  { step: 2, title: "Get Matched", description: "AI matches you with the best provider." },
-  { step: 3, title: "Track & Chat", description: "Follow live updates and communicate." },
-  { step: 4, title: "Pay & Rate", description: "Secure payment and leave a review." },
+  {
+    step: 1,
+    title: "Request Help",
+    description: "Tap SOS and share your location.",
+  },
+  {
+    step: 2,
+    title: "Get Matched",
+    description: "AI matches you with the best provider.",
+  },
+  {
+    step: 3,
+    title: "Track & Chat",
+    description: "Follow live updates and communicate.",
+  },
+  {
+    step: 4,
+    title: "Pay & Rate",
+    description: "Secure payment and leave a review.",
+  },
 ];
 
 export default function HomeScreen({ navigation }) {

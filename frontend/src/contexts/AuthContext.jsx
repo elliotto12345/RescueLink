@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { AppState } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { fetchUserProfile } from "../services/authService";

@@ -4,16 +4,26 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
+  Appearance,
   StatusBar,
   ScrollView,
   Animated,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
-import { connectSocket, disconnectSocket, emitCancelRequest, emitDriverArrived } from "../../services/socket";
-import { updateServiceRequestStatus, subscribeToServiceRequest, clearActiveServiceRequest } from "../../services/requestService";
+import {
+  connectSocket,
+  disconnectSocket,
+  emitCancelRequest,
+  emitDriverArrived,
+} from "../../services/socket";
+import {
+  updateServiceRequestStatus,
+  subscribeToServiceRequest,
+  clearActiveServiceRequest,
+} from "../../services/requestService";
 import { REQUEST_STATUS } from "../../constants/requestStatus";
 import { getUser } from "../../services/storage";
 import { ROLES } from "../../constants/roles";
@@ -335,10 +345,14 @@ export default function TrackMechanicScreen({ navigation, route }) {
             const user = await getUser();
             setDriverArrived(true);
             try {
-              await updateServiceRequestStatus(requestId, REQUEST_STATUS.ARRIVED, {
-                driverArrived: true,
-                driverArrivedAt: new Date().toISOString(),
-              });
+              await updateServiceRequestStatus(
+                requestId,
+                REQUEST_STATUS.ARRIVED,
+                {
+                  driverArrived: true,
+                  driverArrivedAt: new Date().toISOString(),
+                },
+              );
             } catch (error) {
               console.error("Could not confirm arrival:", error);
             }
@@ -426,7 +440,8 @@ export default function TrackMechanicScreen({ navigation, route }) {
       return {
         emoji: "❌",
         title: "Request Declined",
-        subtitle: "The mechanic declined your request. You can choose another mechanic.",
+        subtitle:
+          "The mechanic declined your request. You can choose another mechanic.",
         color: "#DC2626",
         bg: "#FEE2E2",
       };
@@ -466,7 +481,8 @@ export default function TrackMechanicScreen({ navigation, route }) {
       return {
         emoji: "📍",
         title: "Mechanic Has Arrived!",
-        subtitle: "Your mechanic confirmed arrival. Tap the button below to confirm and continue.",
+        subtitle:
+          "Your mechanic confirmed arrival. Tap the button below to confirm and continue.",
         color: "#7C3AED",
         bg: "#EDE9FE",
       };
@@ -474,7 +490,8 @@ export default function TrackMechanicScreen({ navigation, route }) {
       return {
         emoji: "🔧",
         title: "Service In Progress",
-        subtitle: "Your mechanic is working on your vehicle. You'll be notified when service is complete.",
+        subtitle:
+          "Your mechanic is working on your vehicle. You'll be notified when service is complete.",
         color: "#7C3AED",
         bg: "#EDE9FE",
       };
@@ -496,14 +513,23 @@ export default function TrackMechanicScreen({ navigation, route }) {
       };
   };
 
-  const needsDriverArrivalConfirm = (status === "OnTheWay" || status === "MechanicArrived" || mechanicArrived) && !driverArrived;
+  const needsDriverArrivalConfirm =
+    (status === "OnTheWay" ||
+      status === "MechanicArrived" ||
+      mechanicArrived) &&
+    !driverArrived;
 
   const statusInfo = getStatusInfo();
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={needsDriverArrivalConfirm ? styles.scrollWithFooter : undefined}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={
+          needsDriverArrivalConfirm ? styles.scrollWithFooter : undefined
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -530,16 +556,20 @@ export default function TrackMechanicScreen({ navigation, route }) {
           <View style={styles.promptBanner}>
             <Text style={styles.promptBannerTitle}>🚗 Mechanic On The Way</Text>
             <Text style={styles.promptBannerText}>
-              {mechanic?.name || "Your mechanic"} is heading to your location. You'll be asked to confirm when they arrive.
+              {mechanic?.name || "Your mechanic"} is heading to your location.
+              You'll be asked to confirm when they arrive.
             </Text>
           </View>
         )}
 
         {mechanicArrived && !driverArrived && (
           <View style={styles.promptBannerUrgent}>
-            <Text style={styles.promptBannerTitle}>📍 Mechanic Has Arrived</Text>
+            <Text style={styles.promptBannerTitle}>
+              📍 Mechanic Has Arrived
+            </Text>
             <Text style={styles.promptBannerText}>
-              {mechanic?.name || "Your mechanic"} confirmed they are at your location. Tap the button below to confirm and continue.
+              {mechanic?.name || "Your mechanic"} confirmed they are at your
+              location. Tap the button below to confirm and continue.
             </Text>
           </View>
         )}
@@ -548,7 +578,8 @@ export default function TrackMechanicScreen({ navigation, route }) {
           <View style={styles.promptBanner}>
             <Text style={styles.promptBannerTitle}>✅ Request Accepted</Text>
             <Text style={styles.promptBannerText}>
-              Waiting for {mechanic?.name || "your mechanic"} to start their journey to you.
+              Waiting for {mechanic?.name || "your mechanic"} to start their
+              journey to you.
             </Text>
           </View>
         )}
@@ -760,54 +791,60 @@ export default function TrackMechanicScreen({ navigation, route }) {
           status !== "Declined" &&
           status !== "AwaitingPayment" &&
           status !== "Completed" && (
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.chatButton}
-              onPress={() =>
-                navigation.navigate("Chat", {
-                  requestId,
-                  mechanic,
-                  issue: serviceType,
-                  otherParty: {
-                    id: mechanic?.id,
-                    name: mechanic?.name || "Mechanic",
-                    subtitle: serviceType,
-                  },
-                })
-              }
-            >
-              <Text style={styles.chatButtonText}>💬 Chat with Mechanic</Text>
-            </TouchableOpacity>
-            {(status === "OnTheWay" || status === "MechanicArrived" || mechanicArrived) && !driverArrived && (
+            <View style={styles.actions}>
               <TouchableOpacity
-                style={[
-                  styles.arrivedButton,
-                  (mechanicArrived || status === "MechanicArrived") && styles.arrivedButtonUrgent,
-                ]}
-                onPress={handleConfirmMechanicArrived}
+                style={styles.chatButton}
+                onPress={() =>
+                  navigation.navigate("Chat", {
+                    requestId,
+                    mechanic,
+                    issue: serviceType,
+                    otherParty: {
+                      id: mechanic?.id,
+                      name: mechanic?.name || "Mechanic",
+                      subtitle: serviceType,
+                    },
+                  })
+                }
               >
-                <Text
-                  style={[
-                    styles.arrivedButtonText,
-                    (mechanicArrived || status === "MechanicArrived") && styles.arrivedButtonTextUrgent,
-                  ]}
-                >
-                  {mechanicArrived || status === "MechanicArrived"
-                    ? "✅ Confirm Mechanic Has Arrived"
-                    : "📍 Confirm Mechanic Has Arrived"}
-                </Text>
+                <Text style={styles.chatButtonText}>💬 Chat with Mechanic</Text>
               </TouchableOpacity>
-            )}
-            {status === "Arrived" && (
-              <View style={styles.waitingCard}>
-                <Text style={styles.waitingTitle}>Service in progress</Text>
-                <Text style={styles.waitingSubtitle}>
-                  You'll receive a notification when the mechanic marks the service complete.
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+              {(status === "OnTheWay" ||
+                status === "MechanicArrived" ||
+                mechanicArrived) &&
+                !driverArrived && (
+                  <TouchableOpacity
+                    style={[
+                      styles.arrivedButton,
+                      (mechanicArrived || status === "MechanicArrived") &&
+                        styles.arrivedButtonUrgent,
+                    ]}
+                    onPress={handleConfirmMechanicArrived}
+                  >
+                    <Text
+                      style={[
+                        styles.arrivedButtonText,
+                        (mechanicArrived || status === "MechanicArrived") &&
+                          styles.arrivedButtonTextUrgent,
+                      ]}
+                    >
+                      {mechanicArrived || status === "MechanicArrived"
+                        ? "✅ Confirm Mechanic Has Arrived"
+                        : "📍 Confirm Mechanic Has Arrived"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              {status === "Arrived" && (
+                <View style={styles.waitingCard}>
+                  <Text style={styles.waitingTitle}>Service in progress</Text>
+                  <Text style={styles.waitingSubtitle}>
+                    You'll receive a notification when the mechanic marks the
+                    service complete.
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
 
         {status === "AwaitingPayment" && (
           <View style={styles.actions}>
