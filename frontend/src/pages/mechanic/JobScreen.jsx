@@ -16,11 +16,13 @@ import {
   emitMechanicOnTheWay,
   emitMechanicArrived,
   emitServiceComplete,
+  emitPaymentReminder,
   getSocket,
 } from "../../services/socket";
 import {
   updateServiceRequestStatus,
   subscribeToServiceRequest,
+  remindDriverToPay,
 } from "../../services/requestService";
 import { REQUEST_STATUS, JOB_STEP } from "../../constants/requestStatus";
 import { getUser } from "../../services/storage";
@@ -33,13 +35,43 @@ const statusSteps = [
   { id: 4, key: JOB_STEP.COMPLETED, label: "Job Completed", emoji: "🎉" },
 ];
 
+function getJobStepFromRequest(request) {
+  if (!request) return JOB_STEP.ACCEPTED;
+  if (
+    request.status === REQUEST_STATUS.SERVICE_COMPLETE ||
+    request.status === REQUEST_STATUS.COMPLETED
+  ) {
+    return JOB_STEP.COMPLETED;
+  }
+  if (request.status === REQUEST_STATUS.ARRIVED) return JOB_STEP.ARRIVED;
+  if (request.status === REQUEST_STATUS.ON_THE_WAY) return JOB_STEP.ON_THE_WAY;
+  if (request.mechanicArrived && request.driverArrived) return JOB_STEP.ARRIVED;
+  if (request.mechanicArrived) return JOB_STEP.ON_THE_WAY;
+  return JOB_STEP.ACCEPTED;
+}
+
 export default function JobScreen({ navigation, route }) {
   const request = route?.params?.request;
-  const readOnly = request?.readOnly;
+  const awaitingPaymentOnOpen =
+    request?.status === REQUEST_STATUS.SERVICE_COMPLETE;
+  const readOnly =
+    Boolean(request?.readOnly) &&
+    request?.status !== REQUEST_STATUS.SERVICE_COMPLETE;
 
-  const [currentStatus, setCurrentStatus] = useState(JOB_STEP.ACCEPTED);
-  const [mechanicArrived, setMechanicArrived] = useState(false);
-  const [driverArrived, setDriverArrived] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(() =>
+    getJobStepFromRequest(request),
+  );
+  const [requestStatus, setRequestStatus] = useState(request?.status);
+  const [mechanicArrived, setMechanicArrived] = useState(
+    Boolean(request?.mechanicArrived) ||
+      request?.status === REQUEST_STATUS.ARRIVED ||
+      awaitingPaymentOnOpen,
+  );
+  const [driverArrived, setDriverArrived] = useState(
+    Boolean(request?.driverArrived) ||
+      request?.status === REQUEST_STATUS.ARRIVED ||
+      awaitingPaymentOnOpen,
+  );
   const [chargeAmount, setChargeAmount] = useState(() =>
     request?.amount != null ? String(request.amount) : "",
   );
@@ -69,6 +101,13 @@ export default function JobScreen({ navigation, route }) {
     initSocket();
 
     const unsubscribe = subscribeToServiceRequest(request.id, (data) => {
+      if (data.status) {
+        setRequestStatus(data.status);
+        setCurrentStatus(getJobStepFromRequest(data));
+      }
+      if (data.amount != null) {
+        setChargeAmount(String(data.amount));
+      }
       if (data.driverArrived) {
         setDriverArrived(true);
       }
@@ -76,7 +115,9 @@ export default function JobScreen({ navigation, route }) {
         setMechanicArrived(true);
       }
       if (data.mechanicArrived && data.driverArrived) {
-        setCurrentStatus(JOB_STEP.ARRIVED);
+        setCurrentStatus((prev) =>
+          prev === JOB_STEP.COMPLETED ? prev : JOB_STEP.ARRIVED,
+        );
       }
     });
 
@@ -150,6 +191,7 @@ export default function JobScreen({ navigation, route }) {
           },
         );
         emitServiceComplete({ ...buildPayload(user), amount, currency: "GHS" });
+        setRequestStatus(REQUEST_STATUS.SERVICE_COMPLETE);
         setCurrentStatus(JOB_STEP.COMPLETED);
       }
     } catch (error) {
@@ -168,6 +210,32 @@ export default function JobScreen({ navigation, route }) {
       setCurrentStatus(JOB_STEP.ARRIVED);
     }
   }, [mechanicArrived, driverArrived, currentStatus]);
+
+  const awaitingPayment = requestStatus === REQUEST_STATUS.SERVICE_COMPLETE;
+  const isPaid = requestStatus === REQUEST_STATUS.COMPLETED;
+
+  const handleRemindDriver = async () => {
+    const user = await getUser();
+    if (!user?.id || !request?.id || submitting) return;
+
+    setSubmitting(true);
+    try {
+      await remindDriverToPay(request.id);
+      emitPaymentReminder({
+        ...buildPayload(user),
+        amount: parseFloat(chargeAmount) || request.amount || 0,
+        currency: request.currency || "GHS",
+      });
+      Alert.alert(
+        "Reminder sent",
+        "The driver has been asked to complete this payment.",
+      );
+    } catch (error) {
+      Alert.alert("Error", "Could not send the payment reminder. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const getNextButtonLabel = () => {
     if (currentStatus === JOB_STEP.ACCEPTED) return "Start Journey 🚗";
@@ -411,13 +479,40 @@ export default function JobScreen({ navigation, route }) {
           >
             <Text style={styles.nextButtonText}>{getNextButtonLabel()}</Text>
           </TouchableOpacity>
+        ) : !readOnly && awaitingPayment ? (
+          <View style={styles.pendingPayBanner}>
+            <Text style={styles.completedEmoji}>💳</Text>
+            <Text style={styles.pendingTitle}>Awaiting Payment</Text>
+            <Text style={styles.completedSubtitle}>
+              The driver still needs to pay GHS {chargeAmount || request.amount}.
+              You can remind them anytime.
+            </Text>
+            <TouchableOpacity
+              style={styles.remindButton}
+              onPress={handleRemindDriver}
+              disabled={submitting}
+            >
+              <Text style={styles.remindButtonText}>
+                {submitting ? "Sending..." : "Remind Driver to Pay"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.backHomeButton}
+              onPress={() => navigation.navigate("MechanicDashboard")}
+            >
+              <Text style={styles.backHomeButtonText}>Back to Dashboard</Text>
+            </TouchableOpacity>
+          </View>
         ) : !readOnly ? (
           <View style={styles.completedBanner}>
             <Text style={styles.completedEmoji}>🎉</Text>
-            <Text style={styles.completedTitle}>Job Completed!</Text>
+            <Text style={styles.completedTitle}>
+              {isPaid ? "Payment Received" : "Job Completed!"}
+            </Text>
             <Text style={styles.completedSubtitle}>
-              The driver has been notified to proceed with payment of GHS{" "}
-              {chargeAmount}.
+              {isPaid
+                ? `The driver paid GHS ${chargeAmount || request.amount}.`
+                : `The driver has been notified to proceed with payment of GHS ${chargeAmount}.`}
             </Text>
             <TouchableOpacity
               style={styles.backHomeButton}
@@ -776,6 +871,36 @@ const styles = StyleSheet.create({
     padding: 28,
     alignItems: "center",
     marginBottom: 40,
+  },
+  pendingPayBanner: {
+    marginHorizontal: 24,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 20,
+    padding: 28,
+    alignItems: "center",
+    marginBottom: 40,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+  },
+  pendingTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#B45309",
+    marginBottom: 6,
+  },
+  remindButton: {
+    backgroundColor: "#D97706",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginBottom: 12,
+    width: "100%",
+    alignItems: "center",
+  },
+  remindButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "bold",
   },
   completedEmoji: {
     fontSize: 52,

@@ -1,12 +1,14 @@
 import axios from "axios";
 import { getApiBaseUrl } from "../constants/apiConfig";
 
-const BASE_URL = getApiBaseUrl();
-
 const api = axios.create({
-  baseURL: BASE_URL,
   timeout: 15000,
   headers: { "Content-Type": "application/json" },
+});
+
+api.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl();
+  return config;
 });
 
 export const createRequest = (data) => api.post("/api/requests", data);

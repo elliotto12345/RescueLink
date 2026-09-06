@@ -1,8 +1,6 @@
 import { io } from "socket.io-client";
 import { getApiBaseUrl } from "../constants/apiConfig";
 
-const SOCKET_URL = getApiBaseUrl();
-
 let socket = null;
 let socketUserId = null;
 
@@ -19,7 +17,7 @@ export const connectSocket = (userId, role = "user") => {
     socketUserId = null;
   }
 
-  socket = io(SOCKET_URL, {
+  socket = io(getApiBaseUrl(), {
     transports: ["websocket"],
     query: { userId: normalizedId, role },
   });
@@ -113,4 +111,8 @@ export const emitDriverArrived = (data) => {
 
 export const emitServiceComplete = (data) => {
   emitWhenConnected("serviceComplete", data);
+};
+
+export const emitPaymentReminder = (data) => {
+  emitWhenConnected("paymentReminder", data);
 };

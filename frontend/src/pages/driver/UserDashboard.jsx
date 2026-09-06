@@ -23,6 +23,7 @@ import {
   subscribeToServiceRequest,
   clearActiveServiceRequest,
   isActiveRequestStatus,
+  getDriverPaymentParams,
 } from "../../services/requestService";
 import { REQUEST_STATUS } from "../../constants/requestStatus";
 import { connectSocket } from "../../services/socket";
@@ -64,10 +65,14 @@ function getActiveRequestMessage(request) {
   }
 
   if (request.status === REQUEST_STATUS.SERVICE_COMPLETE) {
+    const charged = Number(request.amount ?? 0) > 0;
     return {
-      title: "Service Completed",
-      subtitle: `Pay GHS ${request.amount ?? 0} to complete your request.`,
+      title: charged ? "Payment Due" : "Service Completed",
+      subtitle: charged
+        ? `Pay GHS ${request.amount} to complete your request.`
+        : "Your mechanic completed the service.",
       urgent: true,
+      payNow: charged,
     };
   }
 
@@ -131,6 +136,16 @@ function DashboardContent({ navigation }) {
           activeRequestMeta?.mechanic?.name ||
           "Your mechanic";
 
+        const openPayment = () => {
+          const params = getDriverPaymentParams(request, {
+            service: activeRequestMeta?.service,
+            mechanicId: activeRequestMeta?.mechanic?.id,
+            requestId: activeRequestMeta?.requestId,
+          });
+          if (!params) return;
+          navigation.navigate("Payments", params);
+        };
+
         if (
           request.status === REQUEST_STATUS.ON_THE_WAY &&
           prev.status !== REQUEST_STATUS.ON_THE_WAY
@@ -155,19 +170,54 @@ function DashboardContent({ navigation }) {
           Alert.alert(
             "Service Completed",
             `${mechanicName} completed the service. Pay GHS ${request.amount ?? 0}.`,
+            Number(request.amount ?? 0) > 0
+              ? [
+                  { text: "Pay Now", onPress: openPayment },
+                  { text: "Later", style: "cancel" },
+                ]
+              : undefined,
+          );
+        }
+
+        if (
+          request.paymentReminderAt &&
+          request.paymentReminderAt !== prev.paymentReminderAt &&
+          request.status === REQUEST_STATUS.SERVICE_COMPLETE
+        ) {
+          Alert.alert(
+            "Payment Reminder",
+            `${mechanicName} is waiting for payment of GHS ${request.amount ?? 0}.`,
+            Number(request.amount ?? 0) > 0
+              ? [
+                  { text: "Pay Now", onPress: openPayment },
+                  { text: "Later", style: "cancel" },
+                ]
+              : [{ text: "OK" }],
           );
         }
       },
     );
 
     return unsubscribe;
-  }, [activeRequestMeta?.requestId]);
+  }, [activeRequestMeta?.requestId, activeRequestMeta?.mechanic, activeRequestMeta?.service, navigation]);
 
   const activeMessage = getActiveRequestMessage(liveRequest);
   const showActiveBanner = activeMessage && activeRequestMeta;
 
   const openActiveRequest = () => {
     if (!activeRequestMeta) return;
+
+    const paymentParams = getDriverPaymentParams(liveRequest, {
+      service: activeRequestMeta.service,
+      mechanicName: activeRequestMeta.mechanic?.name,
+      mechanicId: activeRequestMeta.mechanic?.id,
+      requestId: activeRequestMeta.requestId,
+    });
+
+    if (paymentParams && liveRequest?.status === REQUEST_STATUS.SERVICE_COMPLETE) {
+      navigation.navigate("Payments", paymentParams);
+      return;
+    }
 
     navigation.navigate("TrackMechanic", {
       mechanic: activeRequestMeta.mechanic,
@@ -211,7 +261,9 @@ function DashboardContent({ navigation }) {
               {activeMessage.subtitle}
             </Text>
             <Text style={styles.activeRequestAction}>
-              Tap to view active request →
+              {activeMessage.payNow
+                ? "Tap to pay now →"
+                : "Tap to view active request →"}
             </Text>
           </TouchableOpacity>
         )}

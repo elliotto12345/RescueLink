@@ -439,7 +439,7 @@ export default function MechanicDashboard({ navigation }) {
                 <Text style={styles.emptyEmoji}>📋</Text>
                 <Text style={styles.emptyTitle}>No Completed Jobs</Text>
                 <Text style={styles.emptySubtitle}>
-                  Completed jobs will appear here
+                  Completed and unpaid jobs will appear here
                 </Text>
               </View>
             ) : (
@@ -451,12 +451,17 @@ export default function MechanicDashboard({ navigation }) {
                     navigation.navigate("JobScreen", {
                       request: {
                         id: job.id,
+                        userId: job.userId,
                         user: job.user,
                         issue: job.issue,
                         address: job.address,
                         status: job.status,
                         amount: job.amount,
-                        readOnly: true,
+                        currency: job.currency,
+                        mechanicId: job.mechanicId,
+                        mechanicName: job.mechanicName,
+                        phone: job.phone,
+                        readOnly: job.status !== REQUEST_STATUS.SERVICE_COMPLETE,
                       },
                     })
                   }
@@ -475,7 +480,7 @@ export default function MechanicDashboard({ navigation }) {
                     <View style={styles.earnedBadge}>
                       <Text style={styles.earnedText}>{job.earned}</Text>
                     </View>
-                    {job.status === "service_complete" && (
+                    {job.status === REQUEST_STATUS.SERVICE_COMPLETE && (
                       <Text style={styles.pendingLabel}>Awaiting payment</Text>
                     )}
                   </View>

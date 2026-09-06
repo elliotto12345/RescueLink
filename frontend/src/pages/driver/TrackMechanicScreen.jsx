@@ -23,6 +23,7 @@ import {
   updateServiceRequestStatus,
   subscribeToServiceRequest,
   clearActiveServiceRequest,
+  getDriverPaymentParams,
 } from "../../services/requestService";
 import { REQUEST_STATUS } from "../../constants/requestStatus";
 import { getUser } from "../../services/storage";
@@ -108,17 +109,7 @@ export default function TrackMechanicScreen({ navigation, route }) {
         [
           {
             text: "Pay Now",
-            onPress: () => {
-              navigation.navigate("Payments", {
-                service: serviceType,
-                provider: request.mechanicName || mechanicName,
-                amount,
-                currency: request.currency || "GHS",
-                fromServiceFlow: true,
-                requestId,
-                mechanicId: mechanic?.id || request.mechanicId,
-              });
-            },
+            onPress: () => goToPayment(request),
           },
           { text: "Later", style: "cancel" },
         ],
@@ -370,16 +361,35 @@ export default function TrackMechanicScreen({ navigation, route }) {
     );
   };
 
+  const goToPayment = (requestLike = {}) => {
+    const params = getDriverPaymentParams(
+      {
+        id: requestId,
+        issue: serviceType,
+        mechanicName: mechanic?.name,
+        mechanicId: mechanic?.id,
+        amount: requestLike.amount ?? serviceAmount ?? route.params?.amount,
+        currency: requestLike.currency || "GHS",
+        ...requestLike,
+      },
+      {
+        service: serviceType,
+        provider: mechanic?.name,
+        mechanicId: mechanic?.id,
+        requestId,
+      },
+    );
+
+    if (!params) {
+      Alert.alert("Payment", "No service amount has been charged yet.");
+      return;
+    }
+
+    navigation.navigate("Payments", params);
+  };
+
   const handleProceedToPayment = () => {
-    navigation.navigate("Payments", {
-      service: serviceType,
-      provider: mechanic?.name || "Provider",
-      amount: serviceAmount ?? route.params?.amount ?? 0,
-      currency: "GHS",
-      fromServiceFlow: true,
-      requestId,
-      mechanicId: mechanic?.id,
-    });
+    goToPayment();
   };
 
   const handleCancelRequest = () => {

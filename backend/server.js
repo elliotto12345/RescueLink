@@ -84,6 +84,11 @@ io.on("connection", (socket) => {
     notifyUser(data.userId, "serviceComplete", data);
   });
 
+  socket.on("paymentReminder", (data) => {
+    console.log("Payment reminder:", data);
+    notifyUser(data.userId, "paymentReminder", data);
+  });
+
   // Mechanic declines request — notify the driver only
   socket.on("declineRequest", (data) => {
     console.log("Request declined:", data);
@@ -155,10 +160,17 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/requests", require("./routes/requests"));
 app.use("/api/mechanics", require("./routes/mechanics"));
 app.use("/api/otp", require("./routes/otp"));
+app.use("/api/payments", require("./routes/payments"));
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
+server.listen(PORT, "0.0.0.0", async () => {
+  console.log(`Server running on port ${PORT} (http://0.0.0.0:${PORT})`);
+
+  console.log(
+    process.env.PAYSTACK_SECRET_KEY
+      ? "Paystack: ready"
+      : "Paystack: not configured — set PAYSTACK_SECRET_KEY in backend/.env",
+  );
 
   const firebaseReady = Boolean(getFirebaseAdmin());
   console.log(

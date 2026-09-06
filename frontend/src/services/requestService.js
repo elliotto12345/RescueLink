@@ -7,6 +7,7 @@ import {
   getDocs,
   onSnapshot,
   query,
+  increment,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -126,10 +127,40 @@ export function mapRequestToJob(request) {
     mechanicName: request.mechanicName,
     status: request.status,
     amount: request.amount,
+    currency: request.currency || "GHS",
     completedAt: request.completedAt,
     paidAt: request.paidAt,
     rating: request.rating,
   };
+}
+
+export function getDriverPaymentParams(request, extras = {}) {
+  if (!request) return null;
+  const amount = Number(request.amount ?? extras.amount ?? 0);
+  if (!(amount > 0)) return null;
+
+  return {
+    service: request.issue || extras.service || "Roadside Assistance",
+    provider:
+      request.mechanicName || extras.provider || extras.mechanicName || "Provider",
+    amount,
+    currency: request.currency || extras.currency || "GHS",
+    fromServiceFlow: true,
+    requestId: request.id || extras.requestId,
+    mechanicId: request.mechanicId || extras.mechanicId,
+  };
+}
+
+export async function remindDriverToPay(requestId) {
+  if (!requestId) {
+    throw new Error("Request id is required");
+  }
+
+  await updateDoc(doc(db, COLLECTION, requestId), {
+    paymentReminderAt: new Date().toISOString(),
+    paymentReminderCount: increment(1),
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 function formatJobDate(isoDate) {
@@ -148,12 +179,17 @@ export function mapCompletedJob(request) {
 
   return {
     id: request.id,
-    user: request.userName || "Driver",
+    userId: request.userId,
+    user: request.userName || request.user || "Driver",
     issue: request.issue || "Service",
     address: request.address || "",
     date: formatJobDate(dateSource),
     earned: isPaid ? `GHS ${amount}` : `GHS ${amount} (pending)`,
     amount,
+    currency: request.currency || "GHS",
+    mechanicId: request.mechanicId,
+    mechanicName: request.mechanicName,
+    phone: request.userPhone,
     status: request.status,
     paidAt: request.paidAt,
     rating: request.rating,
@@ -172,11 +208,15 @@ export async function fetchCompletedJobsForMechanic(mechanicId) {
 
   return snapshot.docs
     .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
-    .sort(
-      (a, b) =>
+    .sort((a, b) => {
+      const unpaidA = a.status === REQUEST_STATUS.SERVICE_COMPLETE ? 0 : 1;
+      const unpaidB = b.status === REQUEST_STATUS.SERVICE_COMPLETE ? 0 : 1;
+      if (unpaidA !== unpaidB) return unpaidA - unpaidB;
+      return (
         new Date(b.paidAt || b.completedAt || b.updatedAt || 0).getTime() -
-        new Date(a.paidAt || a.completedAt || a.updatedAt || 0).getTime(),
-    )
+        new Date(a.paidAt || a.completedAt || a.updatedAt || 0).getTime()
+      );
+    })
     .map(mapCompletedJob);
 }
 
@@ -470,13 +510,16 @@ export async function fetchMechanicStats(mechanicId) {
   };
 }
 
-export async function markRequestPaid(requestId, amount) {
+export async function markRequestPaid(requestId, amount, payment = {}) {
   if (!requestId) return;
 
   await updateDoc(doc(db, COLLECTION, requestId), {
     status: REQUEST_STATUS.COMPLETED,
     paidAt: new Date().toISOString(),
     paidAmount: amount,
+    paymentReference: payment.reference || null,
+    paymentChannel: payment.channel || null,
+    paymentPhone: payment.phone || null,
     updatedAt: new Date().toISOString(),
   });
 }
