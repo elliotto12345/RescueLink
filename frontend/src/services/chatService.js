@@ -84,10 +84,19 @@ function sortMessages(messages) {
   );
 }
 
+export function getMessageListKey(message) {
+  if (!message?.id) {
+    return `tmp-${message?.timestamp || message?.createdAt || Date.now()}`;
+  }
+  return message.requestId ? `${message.requestId}:${message.id}` : message.id;
+}
+
 function dedupeMessages(messages) {
   const map = new Map();
   messages.forEach((msg) => {
-    if (msg?.id) map.set(msg.id, normalizeMessage(msg, msg.id));
+    const normalized = normalizeMessage(msg, msg.id);
+    const key = getMessageListKey(normalized);
+    if (key) map.set(key, normalized);
   });
   return sortMessages(Array.from(map.values()));
 }
@@ -116,10 +125,11 @@ async function ensureChatDocument(requestId, meta = {}) {
 }
 
 async function fetchMessagesFromNewStructure(requestIds = [], messageLimit) {
-  if (!requestIds.length) return [];
+  const uniqueRequestIds = Array.from(new Set(requestIds.filter(Boolean)));
+  if (!uniqueRequestIds.length) return [];
 
   const allMessages = [];
-  for (const requestId of requestIds) {
+  for (const requestId of uniqueRequestIds) {
     try {
       const messagesQuery = query(
         messagesCollection(requestId),
@@ -351,7 +361,7 @@ export function buildInvertedMessageItems(messages) {
   for (let i = sorted.length - 1; i >= 0; i -= 1) {
     const msg = sorted[i];
     const newerMsg = sorted[i + 1];
-    items.push({ type: "message", id: msg.id, message: msg });
+    items.push({ type: "message", id: getMessageListKey(msg), message: msg });
 
     const dateKey = new Date(msg.timestamp || msg.createdAt || 0).toDateString();
     const newerDateKey = newerMsg
@@ -565,7 +575,9 @@ export function groupRequestsIntoConversations(requests, currentUserId, role) {
       return;
     }
 
-    existing.requestIds.push(request.id);
+    if (!existing.requestIds.includes(request.id)) {
+      existing.requestIds.push(request.id);
+    }
     if (requestUpdated >= new Date(existing.lastMessageAt || 0).getTime()) {
       existing.activeRequestId = request.id;
       existing.issue = request.issue || existing.issue;

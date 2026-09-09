@@ -10,6 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { useState, useEffect } from "react";
 import {
   connectSocket,
@@ -23,10 +24,17 @@ import {
   updateServiceRequestStatus,
   subscribeToServiceRequest,
   remindDriverToPay,
+  saveActiveMechanicJob,
+  clearActiveMechanicJob,
 } from "../../services/requestService";
 import { REQUEST_STATUS, JOB_STEP } from "../../constants/requestStatus";
+import {
+  buildNotificationKey,
+  notifyRequestOnce,
+} from "../../utils/requestNotifications";
 import { getUser } from "../../services/storage";
 import { ROLES } from "../../constants/roles";
+import { promptPhoneCall } from "../../utils/phoneCall";
 
 const statusSteps = [
   { id: 1, key: JOB_STEP.ACCEPTED, label: "Job Accepted", emoji: "✅" },
@@ -78,6 +86,11 @@ export default function JobScreen({ navigation, route }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!request?.id || readOnly) return;
+    saveActiveMechanicJob({ requestId: request.id, request });
+  }, [request?.id, readOnly]);
+
+  useEffect(() => {
     if (!request?.id) return;
 
     const initSocket = async () => {
@@ -91,9 +104,16 @@ export default function JobScreen({ navigation, route }) {
       socket.on("driverArrived", (data) => {
         if (data.requestId && data.requestId !== request.id) return;
         setDriverArrived(true);
-        Alert.alert(
+        if (data.driverConfirmedFirst) {
+          setMechanicArrived(true);
+          setCurrentStatus(JOB_STEP.ARRIVED);
+        }
+        notifyRequestOnce(
+          buildNotificationKey(request.id, "driver_arrived"),
           "Driver Confirmed Arrival",
-          `${data.userName || "The driver"} confirmed you have arrived.`,
+          data.driverConfirmedFirst
+            ? `${data.userName || "The driver"} confirmed arrival. Service can continue.`
+            : `${data.userName || "The driver"} confirmed you have arrived.`,
         );
       });
     };
@@ -104,6 +124,12 @@ export default function JobScreen({ navigation, route }) {
       if (data.status) {
         setRequestStatus(data.status);
         setCurrentStatus(getJobStepFromRequest(data));
+        if (
+          data.status === REQUEST_STATUS.COMPLETED ||
+          data.status === REQUEST_STATUS.CANCELLED
+        ) {
+          clearActiveMechanicJob();
+        }
       }
       if (data.amount != null) {
         setChargeAmount(String(data.amount));
@@ -237,6 +263,10 @@ export default function JobScreen({ navigation, route }) {
     }
   };
 
+  const handleCallDriver = () => {
+    promptPhoneCall(request.user || "Driver", request.phone);
+  };
+
   const getNextButtonLabel = () => {
     if (currentStatus === JOB_STEP.ACCEPTED) return "Start Journey 🚗";
     if (currentStatus === JOB_STEP.ON_THE_WAY) {
@@ -327,7 +357,10 @@ export default function JobScreen({ navigation, route }) {
           </View>
 
           <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.callButton}>
+            <TouchableOpacity
+              style={styles.callButton}
+              onPress={handleCallDriver}
+            >
               <Text style={styles.callButtonText}>📞 Call</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -372,11 +405,35 @@ export default function JobScreen({ navigation, route }) {
             </View>
           )}
 
-        <View style={styles.mapPlaceholder}>
-          <Text style={styles.mapEmoji}>🗺️</Text>
-          <Text style={styles.mapText}>Navigation Map</Text>
-          <Text style={styles.mapSubText}>Live map coming soon</Text>
-        </View>
+        {request.latitude && request.longitude ? (
+          <View style={styles.mapContainer}>
+            <MapView
+              provider={PROVIDER_DEFAULT}
+              style={styles.map}
+              initialRegion={{
+                latitude: request.latitude,
+                longitude: request.longitude,
+                latitudeDelta: 0.02,
+                longitudeDelta: 0.02,
+              }}
+            >
+              <Marker
+                coordinate={{
+                  latitude: request.latitude,
+                  longitude: request.longitude,
+                }}
+                title={request.user || "Driver"}
+                description={request.address || "Service location"}
+              />
+            </MapView>
+          </View>
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <Text style={styles.mapEmoji}>🗺️</Text>
+            <Text style={styles.mapText}>Navigation Map</Text>
+            <Text style={styles.mapSubText}>Location not available</Text>
+          </View>
+        )}
 
         <View style={styles.timelineCard}>
           <Text style={styles.timelineTitle}>Job Status</Text>
@@ -680,13 +737,24 @@ const styles = StyleSheet.create({
     color: "#2563EB",
   },
   mapPlaceholder: {
-    marginHorizontal: 24,
+    marginHorizontal: 8,
     backgroundColor: "#E5E7EB",
-    borderRadius: 20,
-    height: 160,
+    borderRadius: 16,
+    height: 280,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
+  },
+  mapContainer: {
+    marginHorizontal: 8,
+    borderRadius: 16,
+    overflow: "hidden",
+    height: 280,
+    marginBottom: 24,
+  },
+  map: {
+    width: "100%",
+    height: "100%",
   },
   mapEmoji: {
     fontSize: 40,

@@ -19,6 +19,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { connectSocket, getSocket } from "../../services/socket";
 import {
   sendChatMessage,
@@ -44,9 +45,14 @@ import {
   fetchDriverServiceRequests,
   getActiveServiceRequest,
 } from "../../services/requestService";
+import {
+  getCachedThreadList,
+  setCachedThreadList,
+} from "../../services/chatCacheService";
 import { getUser } from "../../services/storage";
 import { ROLES } from "../../constants/roles";
 import { colors, radius } from "../../constants/theme";
+import { setActiveChatConversationId } from "../../utils/chatNotifications";
 
 const TYPING_DEBOUNCE_MS = 1200;
 
@@ -80,7 +86,6 @@ function ChatThread({
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
-  const [syncingRemote, setSyncingRemote] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -91,10 +96,10 @@ function ChatThread({
   const loadingOlderRef = useRef(false);
   const hasMoreRef = useRef(true);
 
-  const resolvedRequestIds = useMemo(
-    () => (requestIds.length ? requestIds : requestId ? [requestId] : []),
-    [requestIds, requestId],
-  );
+  const resolvedRequestIds = useMemo(() => {
+    const ids = requestIds.length ? requestIds : requestId ? [requestId] : [];
+    return Array.from(new Set(ids.filter(Boolean)));
+  }, [requestIds, requestId]);
 
   const listItems = useMemo(
     () => buildInvertedMessageItems(messages),
@@ -124,8 +129,9 @@ function ChatThread({
     hasMoreRef.current = true;
     setMessages([]);
     setLoadingInitial(true);
-    setSyncingRemote(false);
     setLoadError(null);
+
+    setActiveChatConversationId(conversationId);
 
     ensureChatThread({
       conversationId,
@@ -157,7 +163,6 @@ function ChatThread({
           hadCached = true;
           setMessages(cached);
           setLoadingInitial(false);
-          setSyncingRemote(true);
         }
 
         const remote = await syncRemoteMessages(
@@ -168,7 +173,6 @@ function ChatThread({
 
         setMessages((prev) => mergeConversationMessages(prev, remote));
         setLoadingInitial(false);
-        setSyncingRemote(false);
 
         if (
           remote.length < INITIAL_MESSAGE_LIMIT &&
@@ -180,7 +184,6 @@ function ChatThread({
       } catch (error) {
         if (cancelled) return;
         setLoadingInitial(false);
-        setSyncingRemote(false);
         if (!hadCached) {
           setLoadError(error.message || "Could not load messages");
         } else {
@@ -277,10 +280,6 @@ function ChatThread({
       );
     };
 
-    socket.off("receiveMessage");
-    socket.off("typingStart");
-    socket.off("typingStop");
-    socket.off("messagesRead");
     socket.on("receiveMessage", handleReceive);
     socket.on("typingStart", handleTypingStart);
     socket.on("typingStop", handleTypingStop);
@@ -288,6 +287,7 @@ function ChatThread({
 
     return () => {
       cancelled = true;
+      setActiveChatConversationId(null);
       socket.off("receiveMessage", handleReceive);
       socket.off("typingStart", handleTypingStart);
       socket.off("typingStop", handleTypingStop);
@@ -556,15 +556,6 @@ function ChatThread({
           />
         )}
 
-        {syncingRemote && (
-          <View style={styles.syncBanner}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.syncBannerText}>
-              Syncing latest messages...
-            </Text>
-          </View>
-        )}
-
         {loadError && messages.length > 0 && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{loadError}</Text>
@@ -612,7 +603,14 @@ function ChatList({ navigation, currentUser, role, onOpenThread }) {
   const loadThreads = useCallback(async () => {
     if (!currentUser?.id) return;
 
-    setLoading(true);
+    const cached = await getCachedThreadList(currentUser.id);
+    if (cached.length) {
+      setThreads(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const isProvider = role === ROLES.PROVIDER;
       const requests = isProvider
@@ -641,19 +639,23 @@ function ChatList({ navigation, currentUser, role, onOpenThread }) {
         currentUser.id,
         role,
       );
-      setThreads(
-        built.map((t) => mapThreadToListItem(t, currentUser.id, role)),
+      const listItems = built.map((t) =>
+        mapThreadToListItem(t, currentUser.id, role),
       );
+      setThreads(listItems);
+      await setCachedThreadList(currentUser.id, listItems);
     } catch {
-      setThreads([]);
+      if (!cached.length) setThreads([]);
     } finally {
       setLoading(false);
     }
   }, [currentUser?.id, currentUser?.name, role]);
 
-  useEffect(() => {
-    loadThreads();
-  }, [loadThreads]);
+  useFocusEffect(
+    useCallback(() => {
+      loadThreads();
+    }, [loadThreads]),
+  );
 
   const filteredThreads = useMemo(
     () => filterThreads(threads, searchQuery),
@@ -1019,15 +1021,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingStateText: { fontSize: 14, color: colors.textSecondary },
-  syncBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 6,
-    backgroundColor: colors.primaryLight,
-  },
-  syncBannerText: { fontSize: 12, color: colors.textSecondary },
   errorBanner: {
     paddingHorizontal: 16,
     paddingVertical: 8,

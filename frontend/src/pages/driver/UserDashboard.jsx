@@ -7,7 +7,6 @@ import {
   Appearance,
   StatusBar,
   ScrollView,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -19,13 +18,23 @@ import StatusBadge from "../../components/common/StatusBadge";
 import { useAuth } from "../../contexts/AuthContext";
 import { getServiceHistory } from "../../services/serviceHistory";
 import {
+  setCachedDriverRequests,
+} from "../../services/localCache";
+import { RETURN_TO, withReturnTo } from "../../utils/navigationReturn";
+import {
+  fetchDriverServiceRequests,
   getActiveServiceRequest,
   subscribeToServiceRequest,
   clearActiveServiceRequest,
   isActiveRequestStatus,
   getDriverPaymentParams,
+  dedupeRequestsById,
 } from "../../services/requestService";
 import { REQUEST_STATUS } from "../../constants/requestStatus";
+import {
+  buildNotificationKey,
+  notifyRequestOnce,
+} from "../../utils/requestNotifications";
 import { connectSocket } from "../../services/socket";
 import { DRIVER_NAV } from "../../constants/navigation";
 import { colors, shadow, radius } from "../../constants/theme";
@@ -33,6 +42,7 @@ import { ROLES } from "../../constants/roles";
 
 const QUICK_ACTIONS = [
   { emoji: "🔧", label: "Find Mechanic", route: "RequestHelp" },
+  { emoji: "📋", label: "Pending & Pay", route: "PendingRequests" },
   { emoji: "🤖", label: "AI Assistance", route: "AIAssistant" },
   { emoji: "🚨", label: "Emergency", route: "EmergencyCenter" },
 ];
@@ -104,10 +114,13 @@ function DashboardContent({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      getServiceHistory().then(setRequests);
+      getServiceHistory().then((history) => setRequests(dedupeRequestsById(history)));
       getActiveServiceRequest().then(setActiveRequestMeta);
       if (user?.id) {
         connectSocket(user.id, user.role || ROLES.DRIVER);
+        fetchDriverServiceRequests(user.id)
+          .then((remote) => setCachedDriverRequests(user.id, remote))
+          .catch(() => {});
       }
     }, [user?.id, user?.role]),
   );
@@ -143,21 +156,26 @@ function DashboardContent({ navigation }) {
             requestId: activeRequestMeta?.requestId,
           });
           if (!params) return;
-          navigation.navigate("Payments", params);
+          navigation.navigate(
+            "Payments",
+            withReturnTo(params, RETURN_TO.PENDING_REQUESTS),
+          );
         };
 
         if (
           request.status === REQUEST_STATUS.ON_THE_WAY &&
           prev.status !== REQUEST_STATUS.ON_THE_WAY
         ) {
-          Alert.alert(
+          notifyRequestOnce(
+            buildNotificationKey(activeRequestMeta.requestId, "on_the_way"),
             "Mechanic On The Way",
             `${mechanicName} is heading to your location.`,
           );
         }
 
         if (request.mechanicArrived && !prev.mechanicArrived) {
-          Alert.alert(
+          notifyRequestOnce(
+            buildNotificationKey(activeRequestMeta.requestId, "mechanic_arrived"),
             "Mechanic Has Arrived",
             `${mechanicName} confirmed arrival. Open your active request to confirm.`,
           );
@@ -167,7 +185,8 @@ function DashboardContent({ navigation }) {
           request.status === REQUEST_STATUS.SERVICE_COMPLETE &&
           prev.status !== REQUEST_STATUS.SERVICE_COMPLETE
         ) {
-          Alert.alert(
+          notifyRequestOnce(
+            buildNotificationKey(activeRequestMeta.requestId, "service_complete"),
             "Service Completed",
             `${mechanicName} completed the service. Pay GHS ${request.amount ?? 0}.`,
             Number(request.amount ?? 0) > 0
@@ -184,7 +203,11 @@ function DashboardContent({ navigation }) {
           request.paymentReminderAt !== prev.paymentReminderAt &&
           request.status === REQUEST_STATUS.SERVICE_COMPLETE
         ) {
-          Alert.alert(
+          notifyRequestOnce(
+            buildNotificationKey(
+              activeRequestMeta.requestId,
+              `payment_reminder:${request.paymentReminderAt}`,
+            ),
             "Payment Reminder",
             `${mechanicName} is waiting for payment of GHS ${request.amount ?? 0}.`,
             Number(request.amount ?? 0) > 0
@@ -215,16 +238,26 @@ function DashboardContent({ navigation }) {
     });
 
     if (paymentParams && liveRequest?.status === REQUEST_STATUS.SERVICE_COMPLETE) {
-      navigation.navigate("Payments", paymentParams);
+      navigation.navigate(
+        "Payments",
+        withReturnTo(paymentParams, RETURN_TO.PENDING_REQUESTS),
+      );
       return;
     }
 
-    navigation.navigate("TrackMechanic", {
-      mechanic: activeRequestMeta.mechanic,
-      service: activeRequestMeta.service,
-      requestId: activeRequestMeta.requestId,
-      waitingForAcceptance: liveRequest?.status === REQUEST_STATUS.PENDING,
-    });
+    navigation.navigate(
+      "TrackMechanic",
+      withReturnTo(
+        {
+          mechanic: activeRequestMeta.mechanic,
+          service: activeRequestMeta.service,
+          requestId: activeRequestMeta.requestId,
+          waitingForAcceptance: liveRequest?.status === REQUEST_STATUS.PENDING,
+          initialRequestStatus: liveRequest?.status,
+        },
+        RETURN_TO.PENDING_REQUESTS,
+      ),
+    );
   };
 
   return (
@@ -294,6 +327,15 @@ function DashboardContent({ navigation }) {
         </View>
 
         <SectionTitle>Recent Requests</SectionTitle>
+        <TouchableOpacity
+          style={styles.pendingLink}
+          onPress={() => navigation.navigate("PendingRequests")}
+        >
+          <Text style={styles.pendingLinkTitle}>📋 View all pending & payments</Text>
+          <Text style={styles.pendingLinkSubtitle}>
+            Open requests and outstanding payments in one place
+          </Text>
+        </TouchableOpacity>
         <View style={styles.requestsList}>
           {requests.length === 0 ? (
             <Card style={styles.requestCard}>
@@ -421,12 +463,14 @@ const styles = StyleSheet.create({
   sosSubtitle: { fontSize: 14, color: "#BFDBFE" },
   quickActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: 24,
     gap: 12,
     marginBottom: 24,
   },
   actionCard: {
-    flex: 1,
+    width: "47%",
+    flexGrow: 1,
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: 16,
@@ -442,6 +486,26 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   requestsList: { paddingHorizontal: 24, gap: 12 },
+  pendingLink: {
+    marginHorizontal: 24,
+    marginBottom: 12,
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#BFDBFE",
+  },
+  pendingLinkTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 4,
+  },
+  pendingLinkSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
   requestCard: {
     flexDirection: "row",
     justifyContent: "space-between",

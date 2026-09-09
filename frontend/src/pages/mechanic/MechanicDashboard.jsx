@@ -26,9 +26,19 @@ import {
   fetchCompletedJobsForMechanic,
   fetchMechanicStats,
   mapRequestToJob,
+  dedupeRequestsById,
   updateServiceRequestStatus,
+  saveActiveMechanicJob,
+  getActiveMechanicJob,
+  clearActiveMechanicJob,
+  subscribeToServiceRequest,
+  isActiveRequestStatus,
 } from "../../services/requestService";
 import { REQUEST_STATUS } from "../../constants/requestStatus";
+import {
+  buildNotificationKey,
+  notifyRequestOnce,
+} from "../../utils/requestNotifications";
 import { getUser } from "../../services/storage";
 import BottomNav from "../../components/layout/BottomNav";
 import { PROVIDER_NAV } from "../../constants/navigation";
@@ -50,6 +60,8 @@ export default function MechanicDashboard({ navigation }) {
   });
   const [userName, setUserName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [activeJobMeta, setActiveJobMeta] = useState(null);
+  const [liveActiveJob, setLiveActiveJob] = useState(null);
 
   const shareMechanicLocation = async (user) => {
     if (!user?.id) return;
@@ -83,7 +95,7 @@ export default function MechanicDashboard({ navigation }) {
       fetchCompletedJobsForMechanic(mechanicId),
       fetchMechanicStats(mechanicId),
     ]);
-    setLiveRequests(pending.map(mapRequestToJob));
+    setLiveRequests(dedupeRequestsById(pending).map(mapRequestToJob));
     setCompletedJobs(completed);
     setStats(mechanicStats);
   };
@@ -112,6 +124,8 @@ export default function MechanicDashboard({ navigation }) {
       });
 
       setLiveRequests((prev) => prev.filter((r) => r.id !== request.id));
+
+      await saveActiveMechanicJob({ requestId: request.id, request });
 
       navigation.navigate("JobScreen", {
         request: { ...request, status: REQUEST_STATUS.ACCEPTED },
@@ -189,10 +203,11 @@ export default function MechanicDashboard({ navigation }) {
       setLiveRequests((prev) => {
         const exists = prev.find((r) => r.id === data.id);
         if (exists) return prev;
-        return [mapRequestToJob(data), ...prev];
+        return dedupeRequestsById([mapRequestToJob(data), ...prev]);
       });
 
-      Alert.alert(
+      notifyRequestOnce(
+        buildNotificationKey(data.id, "incoming_request"),
         "New Service Request",
         `${data.user || "A driver"} needs help with ${data.issue || "a service"}.`,
       );
@@ -203,10 +218,25 @@ export default function MechanicDashboard({ navigation }) {
       if (!cancelledId) return;
 
       setLiveRequests((prev) => prev.filter((r) => r.id !== cancelledId));
-      Alert.alert(
+      getActiveMechanicJob().then((active) => {
+        if (active?.requestId === cancelledId) {
+          clearActiveMechanicJob();
+          setActiveJobMeta(null);
+          setLiveActiveJob(null);
+        }
+      });
+      notifyRequestOnce(
+        buildNotificationKey(cancelledId, "request_cancelled"),
         "Request Cancelled",
         `${data.userName || "The driver"} cancelled their service request.`,
       );
+    });
+  };
+
+  const openActiveJob = () => {
+    if (!activeJobMeta?.request) return;
+    navigation.navigate("JobScreen", {
+      request: liveActiveJob || activeJobMeta.request,
     });
   };
 
@@ -227,6 +257,8 @@ export default function MechanicDashboard({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
+      let unsubscribe = () => {};
+
       getUser().then((user) => {
         if (user) {
           shareMechanicLocation(user);
@@ -234,6 +266,26 @@ export default function MechanicDashboard({ navigation }) {
           loadAvailableJobs(user.id);
         }
       });
+
+      getActiveMechanicJob().then((active) => {
+        if (!active?.requestId) {
+          setActiveJobMeta(null);
+          setLiveActiveJob(null);
+          return;
+        }
+        setActiveJobMeta(active);
+        unsubscribe = subscribeToServiceRequest(active.requestId, (request) => {
+          if (!isActiveRequestStatus(request.status)) {
+            clearActiveMechanicJob();
+            setActiveJobMeta(null);
+            setLiveActiveJob(null);
+            return;
+          }
+          setLiveActiveJob(mapRequestToJob(request));
+        });
+      });
+
+      return () => unsubscribe();
     }, []),
   );
 
@@ -277,6 +329,17 @@ export default function MechanicDashboard({ navigation }) {
             <Text style={styles.statusText}>Online</Text>
           </View>
         </View>
+
+        {activeJobMeta?.request ? (
+          <TouchableOpacity style={styles.activeJobBanner} onPress={openActiveJob}>
+            <Text style={styles.activeJobTitle}>Active Job In Progress</Text>
+            <Text style={styles.activeJobSubtitle}>
+              Continue with {activeJobMeta.request.user || "your driver"} unless
+              the request was cancelled or completed.
+            </Text>
+            <Text style={styles.activeJobAction}>Tap to resume job →</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
@@ -552,6 +615,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#16A34A",
     fontWeight: "600",
+  },
+  activeJobBanner: {
+    marginHorizontal: 24,
+    marginTop: 8,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#BFDBFE",
+  },
+  activeJobTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  activeJobSubtitle: {
+    fontSize: 14,
+    color: "#374151",
+    lineHeight: 20,
+  },
+  activeJobAction: {
+    fontSize: 13,
+    color: "#2563EB",
+    fontWeight: "700",
+    marginTop: 10,
   },
   statsRow: {
     flexDirection: "row",

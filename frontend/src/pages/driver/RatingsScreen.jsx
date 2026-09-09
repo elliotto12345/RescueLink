@@ -1,12 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  Appearance,
+  TouchableOpacity,
   StatusBar,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ProtectedScreen from "../../navigation/ProtectedScreen";
@@ -16,8 +17,11 @@ import Button from "../../components/common/Button";
 import StarRating from "../../components/common/StarRating";
 import Input from "../../components/common/Input";
 import SectionTitle from "../../components/layout/SectionTitle";
+import InvoicePreviewModal from "../../components/payments/InvoicePreviewModal";
 import { markServiceRated } from "../../services/serviceHistory";
 import { submitMechanicRating } from "../../services/ratingService";
+import { getCompletedInvoice } from "../../services/localCache";
+import { downloadInvoicePdf } from "../../utils/invoice";
 import { getUser } from "../../services/storage";
 import { colors } from "../../constants/theme";
 import { ROLES } from "../../constants/roles";
@@ -28,12 +32,30 @@ function RatingsContent({ navigation, route }) {
   const requestId = route?.params?.requestId;
   const mechanicId = route?.params?.mechanicId;
   const firestoreRequestId = route?.params?.firestoreRequestId;
+  const routeInvoice = route?.params?.invoice;
   const serviceType =
     route?.params?.service && route?.params?.date
       ? `${route.params.service} · ${route.params.date}`
       : "";
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
+  const [invoiceData, setInvoiceData] = useState(routeInvoice || null);
+  const [invoiceVisible, setInvoiceVisible] = useState(false);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
+
+  useEffect(() => {
+    if (routeInvoice) {
+      setInvoiceData(routeInvoice);
+      return;
+    }
+    const loadInvoice = async () => {
+      const cached = await getCompletedInvoice(
+        firestoreRequestId || requestId,
+      );
+      if (cached) setInvoiceData(cached);
+    };
+    loadInvoice();
+  }, [routeInvoice, firestoreRequestId, requestId]);
 
   const goHome = () => {
     navigation.reset({
@@ -82,6 +104,21 @@ function RatingsContent({ navigation, route }) {
     ]);
   };
 
+  const handleDownloadInvoice = async () => {
+    if (!invoiceData) return;
+    setDownloadingInvoice(true);
+    try {
+      await downloadInvoicePdf({ ...invoiceData, isPaid: true });
+    } catch (error) {
+      Alert.alert(
+        "Invoice",
+        "Could not download the invoice. Please try again.",
+      );
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -111,6 +148,14 @@ function RatingsContent({ navigation, route }) {
             numberOfLines={4}
           />
           <Button title="Submit Review" onPress={handleSubmit} />
+          {fromServiceFlow && invoiceData ? (
+            <Button
+              title="View Invoice"
+              variant="outline"
+              onPress={() => setInvoiceVisible(true)}
+              style={{ marginTop: 12 }}
+            />
+          ) : null}
           {fromServiceFlow && (
             <Button
               title="Skip for Now"
@@ -129,6 +174,15 @@ function RatingsContent({ navigation, route }) {
         </View>
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      <InvoicePreviewModal
+        visible={invoiceVisible}
+        invoiceData={invoiceData ? { ...invoiceData, isPaid: true } : null}
+        onClose={() => setInvoiceVisible(false)}
+        onSaveOrShare={handleDownloadInvoice}
+        saving={downloadingInvoice}
+        showDownload
+      />
     </SafeAreaView>
   );
 }
@@ -159,25 +213,6 @@ const styles = StyleSheet.create({
   stars: { alignItems: "center", marginVertical: 20 },
   reviews: { paddingHorizontal: 24, gap: 12 },
   reviewItem: { marginBottom: 0 },
-  reviewHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  reviewUser: {
-    fontSize: 15,
-    fontWeight: "bold",
-    color: colors.text,
-    flexShrink: 1,
-  },
-  reviewComment: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    flexWrap: "wrap",
-  },
-  reviewDate: { fontSize: 12, color: colors.textMuted, marginTop: 8 },
   emptyReviews: {
     fontSize: 14,
     color: colors.textSecondary,

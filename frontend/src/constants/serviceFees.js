@@ -1,0 +1,2 @@
+export const CANCELLATION_FEE = 25;
+export const CANCELLATION_FEE_CURRENCY = "GHS";

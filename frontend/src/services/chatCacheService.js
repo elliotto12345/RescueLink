@@ -116,7 +116,8 @@ export async function appendCachedMessage(requestId, message) {
 }
 
 export async function getCachedMessagesForRequests(requestIds = []) {
-  const chunks = await Promise.all(requestIds.map((id) => getCachedMessages(id)));
+  const uniqueIds = Array.from(new Set(requestIds.filter(Boolean)));
+  const chunks = await Promise.all(uniqueIds.map((id) => getCachedMessages(id)));
   return chunks.flat();
 }
 

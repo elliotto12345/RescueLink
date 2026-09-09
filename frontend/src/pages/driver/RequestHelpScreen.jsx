@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,13 +13,20 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
+import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
 import { getUser } from "../../services/storage";
 import { connectSocket, emitNewRequest } from "../../services/socket";
 import {
   createServiceRequest,
   saveActiveServiceRequest,
+  getActiveServiceRequest,
+  subscribeToServiceRequest,
+  isActiveRequestStatus,
+  getDriverPaymentParams,
 } from "../../services/requestService";
+import { REQUEST_STATUS } from "../../constants/requestStatus";
 import { fetchNearbyMechanicsWithStatus } from "../../services/mechanicService";
 import {
   ensureChatThread,
@@ -31,9 +38,10 @@ import {
 } from "../../utils/location";
 import { ISSUE_TYPES } from "../../constants/issueTypes";
 import { ROLES } from "../../constants/roles";
+import { RETURN_TO, withReturnTo } from "../../utils/navigationReturn";
 
 export default function RequestHelpScreen({ navigation }) {
-  const [selectedIssue, setSelectedIssue] = useState(null);
+  const [selectedIssues, setSelectedIssues] = useState([]);
   const [description, setDescription] = useState("");
   const [locating, setLocating] = useState(false);
   const [location, setLocation] = useState(null);
@@ -43,6 +51,92 @@ export default function RequestHelpScreen({ navigation }) {
   const [mechanics, setMechanics] = useState([]);
   const [selectedMechanic, setSelectedMechanic] = useState(null);
   const [refreshingMechanics, setRefreshingMechanics] = useState(false);
+  const [activeRequestMeta, setActiveRequestMeta] = useState(null);
+  const [liveRequest, setLiveRequest] = useState(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let unsubscribe = () => {};
+
+      const loadActiveRequest = async () => {
+        const active = await getActiveServiceRequest();
+        if (!active?.requestId) {
+          setActiveRequestMeta(null);
+          setLiveRequest(null);
+          return;
+        }
+
+        setActiveRequestMeta(active);
+        unsubscribe = subscribeToServiceRequest(active.requestId, (request) => {
+          if (!isActiveRequestStatus(request.status)) {
+            setActiveRequestMeta(null);
+            setLiveRequest(null);
+            return;
+          }
+          setLiveRequest(request);
+        });
+      };
+
+      loadActiveRequest();
+      return () => unsubscribe();
+    }, []),
+  );
+
+  const goToHome = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "UserDashboard" }],
+    });
+  };
+
+  const continueActiveRequest = () => {
+    if (!activeRequestMeta) return;
+
+    const paymentParams = getDriverPaymentParams(liveRequest, {
+      service: activeRequestMeta.service,
+      mechanicName: activeRequestMeta.mechanic?.name,
+      mechanicId: activeRequestMeta.mechanic?.id,
+      requestId: activeRequestMeta.requestId,
+    });
+
+    if (
+      paymentParams &&
+      liveRequest?.status === REQUEST_STATUS.SERVICE_COMPLETE
+    ) {
+      navigation.navigate(
+        "Payments",
+        withReturnTo(paymentParams, RETURN_TO.PENDING_REQUESTS),
+      );
+      return;
+    }
+
+    navigation.navigate(
+      "TrackMechanic",
+      withReturnTo(
+        {
+          mechanic: activeRequestMeta.mechanic,
+          service: activeRequestMeta.service,
+          requestId: activeRequestMeta.requestId,
+          waitingForAcceptance: liveRequest?.status === REQUEST_STATUS.PENDING,
+          initialRequestStatus: liveRequest?.status,
+        },
+        RETURN_TO.PENDING_REQUESTS,
+      ),
+    );
+  };
+
+  const guardAgainstDuplicateRequest = () => {
+    if (!activeRequestMeta) return false;
+    Alert.alert(
+      "Active Request In Progress",
+      "You already have an open service request. Continue it or cancel it before starting a new one.",
+      [
+        { text: "Stay Here", style: "cancel" },
+        { text: "Continue Request", onPress: continueActiveRequest },
+      ],
+    );
+    return true;
+  };
 
   const fetchAndSortMechanics = async () => {
     const registered = await fetchNearbyMechanicsWithStatus();
@@ -105,9 +199,23 @@ export default function RequestHelpScreen({ navigation }) {
     }
   };
 
+  const toggleIssueSelection = (issueId) => {
+    setSelectedIssues((prev) =>
+      prev.includes(issueId)
+        ? prev.filter((id) => id !== issueId)
+        : [...prev, issueId],
+    );
+  };
+
+  const getSelectedIssueLabels = () =>
+    ISSUE_TYPES.filter((issue) => selectedIssues.includes(issue.id)).map(
+      (issue) => issue.label,
+    );
+
   const loadNearbyMechanics = async () => {
-    if (!selectedIssue) {
-      Alert.alert("Error", "Please select an issue type");
+    if (guardAgainstDuplicateRequest()) return;
+    if (!selectedIssues.length) {
+      Alert.alert("Error", "Please select at least one issue type");
       return;
     }
     if (!location) {
@@ -142,6 +250,7 @@ export default function RequestHelpScreen({ navigation }) {
   };
 
   const handleConfirmRequest = async () => {
+    if (guardAgainstDuplicateRequest()) return;
     if (!selectedMechanic) {
       Alert.alert("Error", "Please select a mechanic to continue");
       return;
@@ -154,13 +263,15 @@ export default function RequestHelpScreen({ navigation }) {
     setSubmitting(true);
     try {
       const user = await getUser();
-      const issueLabel = ISSUE_TYPES.find((i) => i.id === selectedIssue)?.label;
+      const issueLabels = getSelectedIssueLabels();
+      const issueLabel = issueLabels.join(", ");
 
       const serviceRequest = await createServiceRequest({
         userId: user.id,
         userName: user.name,
         userPhone: user.phone,
         issue: issueLabel,
+        issues: issueLabels,
         latitude: location.lat,
         longitude: location.lon,
         address: location.address,
@@ -200,12 +311,18 @@ export default function RequestHelpScreen({ navigation }) {
         mechanicName: selectedMechanic.name,
       });
 
-      navigation.navigate("TrackMechanic", {
-        mechanic: selectedMechanic,
-        service: issueLabel,
-        requestId: serviceRequest.id,
-        waitingForAcceptance: true,
-      });
+      navigation.navigate(
+        "TrackMechanic",
+        withReturnTo(
+          {
+            mechanic: selectedMechanic,
+            service: issueLabel,
+            requestId: serviceRequest.id,
+            waitingForAcceptance: true,
+          },
+          RETURN_TO.PENDING_REQUESTS,
+        ),
+      );
     } catch (error) {
       Alert.alert("Error", "Could not submit request. Please try again.");
     } finally {
@@ -227,19 +344,39 @@ export default function RequestHelpScreen({ navigation }) {
           }
         >
           <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => {
-                setStep("form");
-                setSelectedMechanic(null);
-              }}
-            >
-              <Text style={styles.backText}>← Back</Text>
+            <TouchableOpacity onPress={goToHome}>
+              <Text style={styles.backText}>← Home</Text>
             </TouchableOpacity>
             <Text style={styles.headerTitle} numberOfLines={1}>
               Choose a Mechanic
             </Text>
             <View style={{ width: 50 }} />
           </View>
+
+          {location ? (
+            <View style={styles.mapContainerWide}>
+              <MapView
+                provider={PROVIDER_DEFAULT}
+                style={styles.map}
+                initialRegion={{
+                  latitude: location.lat,
+                  longitude: location.lon,
+                  latitudeDelta: 0.02,
+                  longitudeDelta: 0.02,
+                }}
+                scrollEnabled={false}
+                zoomEnabled={false}
+              >
+                <Marker
+                  coordinate={{
+                    latitude: location.lat,
+                    longitude: location.lon,
+                  }}
+                  title="Your Location"
+                />
+              </MapView>
+            </View>
+          ) : null}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>📍 Registered Mechanics</Text>
@@ -364,8 +501,8 @@ export default function RequestHelpScreen({ navigation }) {
       <StatusBar barStyle="dark-content" />
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backText}>← Back</Text>
+          <TouchableOpacity onPress={goToHome}>
+            <Text style={styles.backText}>← Home</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>
             Request Help
@@ -375,19 +512,63 @@ export default function RequestHelpScreen({ navigation }) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📍 Your Location</Text>
-          {location ? (
-            <View style={styles.locationCard}>
-              <Text style={styles.locationEmoji}>✅</Text>
-              <View style={styles.locationInfo}>
-                <Text style={styles.locationAddress}>{location.address}</Text>
-                <Text style={styles.locationCoords}>
-                  {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
+          {activeRequestMeta ? (
+            <View style={styles.activeRequestCard}>
+              <Text style={styles.activeRequestTitle}>
+                You have an active request
+              </Text>
+              <Text style={styles.activeRequestText}>
+                Continue where you left off with{" "}
+                {activeRequestMeta.mechanic?.name || "your mechanic"} unless you
+                have cancelled or completed the service.
+              </Text>
+              <TouchableOpacity
+                style={styles.continueButton}
+                onPress={continueActiveRequest}
+              >
+                <Text style={styles.continueButtonText}>
+                  Continue Active Request →
                 </Text>
-              </View>
-              <TouchableOpacity onPress={handleGetLocation}>
-                <Text style={styles.refreshText}>🔄</Text>
               </TouchableOpacity>
             </View>
+          ) : null}
+          {location ? (
+            <>
+              <View style={styles.mapContainer}>
+                <MapView
+                  provider={PROVIDER_DEFAULT}
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: location.lat,
+                    longitude: location.lon,
+                    latitudeDelta: 0.02,
+                    longitudeDelta: 0.02,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: location.lat,
+                      longitude: location.lon,
+                    }}
+                    title="Your Location"
+                  />
+                </MapView>
+              </View>
+              <View style={styles.locationCard}>
+                <Text style={styles.locationEmoji}>✅</Text>
+                <View style={styles.locationInfo}>
+                  <Text style={styles.locationAddress}>{location.address}</Text>
+                  <Text style={styles.locationCoords}>
+                    {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={handleGetLocation}>
+                  <Text style={styles.refreshText}>🔄</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           ) : (
             <TouchableOpacity
               style={styles.locationButton}
@@ -412,28 +593,37 @@ export default function RequestHelpScreen({ navigation }) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🔧 What's the Issue?</Text>
+          <Text style={styles.sectionHint}>
+            Select one or more services you need
+          </Text>
           <View style={styles.issueGrid}>
-            {ISSUE_TYPES.map((issue) => (
-              <TouchableOpacity
-                key={issue.id}
-                style={[
-                  styles.issueCard,
-                  selectedIssue === issue.id && styles.issueCardActive,
-                ]}
-                onPress={() => setSelectedIssue(issue.id)}
-              >
-                <Text style={styles.issueEmoji}>{issue.emoji}</Text>
-                <Text
+            {ISSUE_TYPES.map((issue) => {
+              const isSelected = selectedIssues.includes(issue.id);
+              return (
+                <TouchableOpacity
+                  key={issue.id}
                   style={[
-                    styles.issueLabel,
-                    selectedIssue === issue.id && styles.issueLabelActive,
+                    styles.issueCard,
+                    isSelected && styles.issueCardActive,
                   ]}
-                  numberOfLines={2}
+                  onPress={() => toggleIssueSelection(issue.id)}
                 >
-                  {issue.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  {isSelected ? (
+                    <Text style={styles.issueCheckmark}>✓</Text>
+                  ) : null}
+                  <Text style={styles.issueEmoji}>{issue.emoji}</Text>
+                  <Text
+                    style={[
+                      styles.issueLabel,
+                      isSelected && styles.issueLabelActive,
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {issue.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -500,6 +690,23 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: 24,
     marginTop: 24,
+  },
+  mapContainer: {
+    height: 280,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  mapContainerWide: {
+    height: 280,
+    marginHorizontal: 8,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  map: {
+    width: "100%",
+    height: "100%",
   },
   sectionTitle: {
     fontSize: 16,
@@ -606,6 +813,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1.5,
     borderColor: "#E5E7EB",
+    position: "relative",
+  },
+  issueCheckmark: {
+    position: "absolute",
+    top: 8,
+    right: 10,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2563EB",
   },
   issueCardActive: {
     backgroundColor: "#EFF6FF",
@@ -722,5 +938,36 @@ const styles = StyleSheet.create({
   },
   mechanicStatusSelected: {
     color: "#2563EB",
+  },
+  activeRequestCard: {
+    backgroundColor: "#EFF6FF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#BFDBFE",
+    marginBottom: 16,
+  },
+  activeRequestTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 6,
+  },
+  activeRequestText: {
+    fontSize: 14,
+    color: "#374151",
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  continueButton: {
+    backgroundColor: "#2563EB",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  continueButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

@@ -17,6 +17,7 @@ import { REQUEST_STATUS } from "../constants/requestStatus";
 
 const COLLECTION = "serviceRequests";
 const ACTIVE_REQUEST_KEY = "activeServiceRequest";
+const ACTIVE_MECHANIC_JOB_KEY = "activeMechanicJob";
 
 const TERMINAL_STATUSES = new Set([
   REQUEST_STATUS.COMPLETED,
@@ -37,16 +38,70 @@ export async function clearActiveServiceRequest() {
   await AsyncStorage.removeItem(ACTIVE_REQUEST_KEY);
 }
 
+export async function saveActiveMechanicJob(data) {
+  await AsyncStorage.setItem(ACTIVE_MECHANIC_JOB_KEY, JSON.stringify(data));
+}
+
+export async function getActiveMechanicJob() {
+  const raw = await AsyncStorage.getItem(ACTIVE_MECHANIC_JOB_KEY);
+  return raw ? JSON.parse(raw) : null;
+}
+
+export async function clearActiveMechanicJob() {
+  await AsyncStorage.removeItem(ACTIVE_MECHANIC_JOB_KEY);
+}
+
+export function canCancelForFree(status) {
+  return status === REQUEST_STATUS.PENDING;
+}
+
+export function canCancelWithFee(status, { mechanicArrived = false } = {}) {
+  if (
+    !status ||
+    status === REQUEST_STATUS.SERVICE_COMPLETE ||
+    status === REQUEST_STATUS.COMPLETED ||
+    TERMINAL_STATUSES.has(status)
+  ) {
+    return false;
+  }
+
+  if (
+    status === REQUEST_STATUS.ON_THE_WAY ||
+    status === REQUEST_STATUS.ARRIVED
+  ) {
+    return true;
+  }
+
+  // Allow paid cancel once the mechanic has arrived, even if status is still syncing.
+  return Boolean(mechanicArrived);
+}
+
 export function isActiveRequestStatus(status) {
   return status && !TERMINAL_STATUSES.has(status);
 }
 
+export function dedupeRequestsById(requests = []) {
+  const seen = new Map();
+  requests.forEach((request) => {
+    if (!request?.id || seen.has(request.id)) return;
+    seen.set(request.id, request);
+  });
+  return Array.from(seen.values());
+}
+
 export async function createServiceRequest(data) {
+  const issues = Array.isArray(data.issues)
+    ? data.issues.filter(Boolean)
+    : data.issue
+      ? [data.issue]
+      : [];
+
   const payload = {
     userId: data.userId,
     userName: data.userName,
     userPhone: data.userPhone || "",
-    issue: data.issue,
+    issue: data.issue || issues.join(", "),
+    issues,
     description: data.description || "",
     latitude: data.latitude,
     longitude: data.longitude,
@@ -229,19 +284,21 @@ export async function fetchDriverServiceRequests(userId) {
   );
   const snapshot = await getDocs(requestsQuery);
 
-  return snapshot.docs
-    .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
-    .filter(
-      (request) =>
-        request.mechanicId &&
-        request.status !== REQUEST_STATUS.CANCELLED &&
-        request.status !== REQUEST_STATUS.DECLINED,
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.updatedAt || b.createdAt || 0).getTime() -
-        new Date(a.updatedAt || a.createdAt || 0).getTime(),
-    );
+  return dedupeRequestsById(
+    snapshot.docs
+      .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+      .filter(
+        (request) =>
+          request.mechanicId &&
+          request.status !== REQUEST_STATUS.CANCELLED &&
+          request.status !== REQUEST_STATUS.DECLINED,
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt || 0).getTime() -
+          new Date(a.updatedAt || a.createdAt || 0).getTime(),
+      ),
+  );
 }
 
 export async function fetchMechanicServiceRequests(mechanicId) {
@@ -253,18 +310,20 @@ export async function fetchMechanicServiceRequests(mechanicId) {
   );
   const snapshot = await getDocs(requestsQuery);
 
-  return snapshot.docs
-    .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
-    .filter(
-      (request) =>
-        request.status !== REQUEST_STATUS.CANCELLED &&
-        request.status !== REQUEST_STATUS.DECLINED,
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.updatedAt || b.createdAt || 0).getTime() -
-        new Date(a.updatedAt || a.createdAt || 0).getTime(),
-    );
+  return dedupeRequestsById(
+    snapshot.docs
+      .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+      .filter(
+        (request) =>
+          request.status !== REQUEST_STATUS.CANCELLED &&
+          request.status !== REQUEST_STATUS.DECLINED,
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt || 0).getTime() -
+          new Date(a.updatedAt || a.createdAt || 0).getTime(),
+      ),
+  );
 }
 
 async function fetchAllMechanicServiceRequests(mechanicId) {
@@ -520,6 +579,21 @@ export async function markRequestPaid(requestId, amount, payment = {}) {
     paymentReference: payment.reference || null,
     paymentChannel: payment.channel || null,
     paymentPhone: payment.phone || null,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function markCancellationFeePaid(requestId, amount, payment = {}) {
+  if (!requestId) return;
+
+  await updateDoc(doc(db, COLLECTION, requestId), {
+    status: REQUEST_STATUS.CANCELLED,
+    cancelledAt: new Date().toISOString(),
+    cancellationFee: amount,
+    cancellationFeePaid: true,
+    cancellationPaymentReference: payment.reference || null,
+    cancellationPaymentChannel: payment.channel || null,
+    cancellationPaymentPhone: payment.phone || null,
     updatedAt: new Date().toISOString(),
   });
 }

@@ -1,6 +1,8 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { AuthProvider } from "../contexts/AuthContext";
+import GlobalChatNotificationListener from "../components/chat/GlobalChatNotificationListener";
+import { navigationRef } from "./navigationRef";
 
 // Public
 import HomeScreen from "../pages/HomeScreen";
@@ -16,6 +18,7 @@ import RequestHelpScreen from "../pages/driver/RequestHelpScreen";
 import TrackMechanicScreen from "../pages/driver/TrackMechanicScreen";
 import EmergencyCenterScreen from "../pages/driver/EmergencyCenterScreen";
 import PaymentsScreen from "../pages/driver/PaymentsScreen";
+import PendingRequestsScreen from "../pages/driver/PendingRequestsScreen";
 import RatingsScreen from "../pages/driver/RatingsScreen";
 import ChatScreen from "../pages/driver/ChatScreen";
 import AIAssistantScreen from "../pages/driver/AIAssistantScreen";
@@ -36,7 +39,8 @@ const Stack = createNativeStackNavigator();
 export default function AppNavigator() {
   return (
     <AuthProvider>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
+        <GlobalChatNotificationListener />
         <Stack.Navigator
           initialRouteName="Home"
           screenOptions={{ headerShown: false }}
@@ -61,6 +65,10 @@ export default function AppNavigator() {
             component={EmergencyCenterScreen}
           />
           <Stack.Screen name="Payments" component={PaymentsScreen} />
+          <Stack.Screen
+            name="PendingRequests"
+            component={PendingRequestsScreen}
+          />
           <Stack.Screen name="Ratings" component={RatingsScreen} />
 
           {/* Mechanic routes */}
